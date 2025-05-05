@@ -9,10 +9,17 @@ set(CMAKE_CXX_STANDARD 23)
 # add the include directory
 include_directories(include)
 
+
+file(GLOB_RECURSE HEADERS "include/*.h" "include/*.hpp")
+
 # add the source files
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 
-add_executable(f9ay ${SOURCES})
+add_executable(f9ay ${SOURCES} ${HEADERS})
+
+add_compile_definitions(
+    DEBUG=1
+)
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     target_compile_options(f9ay PRIVATE /FAcs)

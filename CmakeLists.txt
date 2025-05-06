@@ -23,4 +23,6 @@ add_compile_definitions(
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     target_compile_options(f9ay PRIVATE /FAcs)
+else()
+    target_compile_options(f9ay PRIVATE -fverbose-asm --save-temps)
 endif()

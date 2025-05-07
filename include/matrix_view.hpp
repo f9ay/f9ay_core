@@ -127,9 +127,6 @@ private:
 template<typename Origin_Type>
 ElementIterator(Origin_Type &origin_type) -> ElementIterator<View_Type::origin, Origin_Type, 0>;
 
-template<int Index, typename Origin_Type>
-ElementIterator(Origin_Type &origin_type) -> ElementIterator<View_Type::fixed, Origin_Type, Index>;
-
 template<typename Origin_Type>
 ElementIterator(Origin_Type &origin_type, int _index) -> ElementIterator<View_Type::runtime, Origin_Type, 0>;
 
@@ -207,9 +204,6 @@ private:
 // 推導指南
 template<typename Origin_Type>
 Row_view(Origin_Type *data, size_t cols) -> Row_view<View_Type::origin, Origin_Type, 0>;
-
-template<int Index, typename Origin_Type>
-Row_view(Origin_Type *data, size_t cols) -> Row_view<View_Type::fixed, Origin_Type, Index>;
 
 template<View_Type TYPE>
 struct Optional_Index {};
@@ -435,9 +429,6 @@ Matrix_view<View_Type::fixed, Origin_Type, Index> Matrix_view_fixed(Matrix<Origi
 // 推導指引
 template<typename Origin_Type>
 Matrix_view(Matrix<Origin_Type> &_origin) -> Matrix_view<View_Type::origin, Origin_Type, 0>;
-
-template<int Index, typename Origin_Type>
-Matrix_view(Matrix<Origin_Type> &_origin) -> Matrix_view<View_Type::fixed, Origin_Type, Index>;
 
 
 template<typename Origin_Type>

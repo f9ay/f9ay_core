@@ -1,41 +1,61 @@
-#include "matrix.hpp"
-
+#include <array>
 #include <functional>
 #include <iostream>
 #include <map>
 #include <print>
 
+#include "matrix.hpp"
+#include "matrix_view.hpp"
+
+using namespace f9ay;
+
 int main(int argc, char **argv) {
-    Matrix<int> matrix(3, 3);
+    Matrix<std::tuple<int, int, int>> mtx(3, 3);
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            mtx[i, j] = std::make_tuple(1, 2, 3);
+        }
+    }
+    std::print("{}", mtx);
+    std::println("====================");
+    auto view = Matrix_view_fixed<1>(mtx);
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            std::cout << view[i, j] << " ";
+        }
+        std::cout << std::endl;
+    }
+    std::println("====================");
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            std::cout << view[i][j] << " ";
+        }
+        std::cout << std::endl;
+    }
+    std::println("====================");
+    for (const auto& row : view) {
+        for (const auto& col : row) {
+            std::cout << col << " ";
+        }
+        std::cout << std::endl;
+    }
+    /////////////////////////////
+    /// rumtime///////////////////
+    /////////////////////////////
+    std::println("====================");
+    auto mtx2 = Matrix<std::array<int, 3>>(3, 3);
 
-    for (auto it = matrix.begin(); it != matrix.end(); ++it) {
-        for (auto it2 = (*it).begin(); it2 != (*it).end(); ++it2) {
-            std::cout << *it2 << " ";
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            mtx2[i, j][2] = -3;
         }
     }
 
-    std::cout << "\n";
-
-    for (auto x : matrix) {
-        for (auto &y : x) {
-            y = 1;
+    auto view2 = Matrix_view(mtx2, 2);
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            std::cout << view2[i, j] << " ";
         }
+        std::cout << std::endl;
     }
-
-    matrix[1, 2] = 3;
-
-    matrix[2][2] = 4;
-
-    for (const auto& x : matrix) {
-        for (const auto &y : x) {
-            std::cout << y << " ";
-        }
-        std::cout << "\n";
-    }
-
-    std::print("{}", matrix);
-
-    std::cout << "======================\n";
-
-    std::cout << matrix << "\n";
 }

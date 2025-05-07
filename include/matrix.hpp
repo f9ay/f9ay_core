@@ -4,6 +4,7 @@
 #include <format>
 #include <iostream>
 
+namespace f9ay {
 template <typename T>
 class Row {
 public:
@@ -29,22 +30,22 @@ public:
 #endif
         return data[j];
     }
-    Row(T *const data, size_t cols) : data(data), cols(cols) {}
+    Row(T *const data, const size_t cols) : data(data), cols(cols) {}
     Row(const Row &other) : data(other.data), cols(other.cols) {}
 
-private:
+//private:
     T *const data = nullptr;
     const size_t cols = 0;
 };
 
 template <typename T>
 class RowIterator {
-private:
+public:
     T *data;
     size_t size;
 
 public:
-    RowIterator(T *_data, size_t _size) : data(_data), size(_size) {}
+    RowIterator(T *_data, const size_t _size) : data(_data), size(_size) {}
 
     // ++x
     RowIterator operator++() {
@@ -208,10 +209,12 @@ inline std::ostream &operator<<(std::ostream &os, const Matrix<int> &matrix) {
     return os;
 }
 
-namespace std {
-template <typename T>
-struct formatter<Matrix<T>, char> : formatter<std::string, char> {
-    auto format(const Matrix<T> &matrix, auto &ctx) const {
+};  // namespace f9ay
+
+template <typename T, typename Char_T>
+struct std::formatter<f9ay::Matrix<T>, Char_T>
+    : std::formatter<std::string, Char_T> {
+    auto format(const f9ay::Matrix<T> &matrix, auto &ctx) const {
         auto out = ctx.out();
         for (int i = 0; i < matrix.row(); i++) {
             for (int j = 0; j < matrix.col(); j++) {
@@ -222,7 +225,6 @@ struct formatter<Matrix<T>, char> : formatter<std::string, char> {
         return out;
     }
 };
-};  // namespace std
 
 /*
     Matrix mtx;

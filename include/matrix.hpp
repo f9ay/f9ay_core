@@ -6,9 +6,13 @@
 
 template <typename T>
 class Row {
-   public:
-    auto begin() const { return data; }
-    auto end() const { return data + cols; }
+public:
+    [[nodiscard]] auto begin() const {
+        return data;
+    }
+    [[nodiscard]] auto end() const {
+        return data + cols;
+    }
     const T &operator[](size_t j) const {
 #ifdef DEBUG
         if (j >= cols) {
@@ -28,18 +32,18 @@ class Row {
     Row(T *const data, size_t cols) : data(data), cols(cols) {}
     Row(const Row &other) : data(other.data), cols(other.cols) {}
 
-   private:
+private:
     T *const data = nullptr;
     const size_t cols = 0;
 };
 
 template <typename T>
 class RowIterator {
-   private:
+private:
     T *data;
     size_t size;
 
-   public:
+public:
     RowIterator(T *_data, size_t _size) : data(_data), size(_size) {}
 
     // ++x
@@ -93,16 +97,22 @@ class RowIterator {
         return data != other.data;
     }
 
-    const Row<T> operator*() const { return Row<T>(data, size); }
+    Row<T> operator*() const {
+        return Row<T>(data, size);
+    }
 
-    Row<T> operator*() { return Row<T>(data, size); }
+    Row<T> operator*() {
+        return Row<T>(data, size);
+    }
 };
 
 template <typename T>
 class Matrix {
-   public:
-    const RowIterator<T> begin() { return RowIterator(data, cols); }
-    const RowIterator<T> end() {
+public:
+    RowIterator<T> begin() {
+        return RowIterator(data, cols);
+    }
+    RowIterator<T> end() {
         return RowIterator(data + (rows * cols), cols);
     }
 
@@ -124,7 +134,7 @@ class Matrix {
         return data[i * cols + j];
     }
 
-    const Row<T> operator[](size_t i) const {
+    Row<T> operator[](size_t i) const {
 #ifdef DEBUG
         if (i >= rows) {
             throw std::out_of_range("Index out of range");
@@ -143,17 +153,21 @@ class Matrix {
         return Row<T>(data + (i * cols), cols);
     }
 
-    int row() const { return rows; }
+    [[nodiscard]] int row() const {
+        return rows;
+    }
 
-    int col() const { return cols; }
+    [[nodiscard]] int col() const {
+        return cols;
+    }
 
-    Matrix(int rows, int cols) : rows(rows), cols(cols) {
+    Matrix(const int _rows, const int _cols) : rows(_rows), cols(_cols) {
         data = new T[rows * cols]{};
     }
     Matrix(const Matrix &) = delete;
     Matrix &operator=(const Matrix &) = delete;
-    Matrix(Matrix &&other)
-        : rows(other.rows), cols(other.cols), data(other.data) {
+    Matrix(Matrix &&other) noexcept
+        : data(other.data), rows(other.rows), cols(other.cols) {
         other.data = nullptr;
         other.rows = -1;
         other.cols = -1;
@@ -175,14 +189,16 @@ class Matrix {
             i++;
         }
     }
-    ~Matrix() { delete[] data; }
+    ~Matrix() {
+        delete[] data;
+    }
 
-   private:
+private:
     T *data = nullptr;
     int rows, cols;
 };
 
-std::ostream &operator<<(std::ostream &os, const Matrix<int> &matrix) {
+inline std::ostream &operator<<(std::ostream &os, const Matrix<int> &matrix) {
     for (int i = 0; i < matrix.row(); i++) {
         for (int j = 0; j < matrix.col(); j++) {
             os << matrix[i][j] << " ";
@@ -191,6 +207,7 @@ std::ostream &operator<<(std::ostream &os, const Matrix<int> &matrix) {
     }
     return os;
 }
+
 namespace std {
 template <typename T>
 struct formatter<Matrix<T>, char> : formatter<std::string, char> {

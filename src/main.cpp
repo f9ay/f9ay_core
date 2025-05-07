@@ -1,4 +1,4 @@
-#include <matrix.h>
+#include "matrix.hpp"
 
 #include <functional>
 #include <iostream>
@@ -26,8 +26,8 @@ int main(int argc, char **argv) {
 
     matrix[2][2] = 4;
 
-    for (auto x : matrix) {
-        for (auto y : x) {
+    for (const auto& x : matrix) {
+        for (const auto &y : x) {
             std::cout << y << " ";
         }
         std::cout << "\n";

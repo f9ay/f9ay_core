@@ -1,3 +1,5 @@
-BasedOnStyle:  Google 
+BasedOnStyle: Google 
 TabWidth:  4 
 IndentWidth:  4
+AllowShortFunctionsOnASingleLine: Empty
+AccessModifierOffset: -4

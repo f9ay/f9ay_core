@@ -4,14 +4,22 @@ project(f9ay)
 
 set(CMAKE_CXX_STANDARD 23)
 
+include(FetchContent)
+
+# download gtest
+FetchContent_Declare(
+        googletest
+        GIT_REPOSITORY
+        https://github.com/google/googletest.git
+        GIT_TAG        v1.17.0
+)
+FetchContent_MakeAvailable(googletest)
 
 # add the include directory
 include_directories(include)
 
 
 file(GLOB_RECURSE HEADERS "include/*.h" "include/*.hpp")
-
-message(STATUS "CMAKE_OSX_SYSROOT ${CMAKE_OSX_SYSROOT}")
 # add the source files
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 
@@ -21,12 +29,18 @@ file(GLOB_RECURSE SOURCES "src/*.cpp")
 
 add_executable(f9ay ${SOURCES} ${HEADERS})
 
-
 if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-    target_compile_options(f9ay PRIVATE /FAcs)
+target_compile_options(f9ay PRIVATE /FAcs)
 elseif(CMAKE_CXXCOMPILER_ID STREQUAL "CLANG")
-    target_compile_options(f9ay PRIVATE -fverbose-asm --save-temps -fexperimental-library)
+target_compile_options(f9ay PRIVATE -fverbose-asm --save-temps -fexperimental-library)
 else ()
-    # target_compile_definitions(f9ay PRIVATE -fallow-extended-attribute-placement)
+# target_compile_definitions(f9ay PRIVATE -fallow-extended-attribute-placement)
 endif()
 
+
+enable_testing()
+add_executable(ls77_test test/ls77_test.cpp)
+target_include_directories(ls77_test PRIVATE ${GTEST_INCLUDE_DIRS} include/LS77_compress.hpp)
+target_link_libraries(ls77_test PRIVATE gtest_main) 
+
+add_test(NAME ls77_test COMMAND ls77_test)  

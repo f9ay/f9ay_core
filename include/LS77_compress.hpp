@@ -43,37 +43,10 @@ ls77Encode(const Container& container) {
         // extend the buffer to length of bufferSize or until the end of the
         // container
         bool hasFound = false;
-        std::println("===========dict================");
-        for (auto nowIt = dictBegin; nowIt != dictEnd; nowIt++) {
-            std::print("{}", *nowIt);
-        }
-        std::println("\n============buffer=============");
-        for (auto nowIt = bufferBegin; nowIt != bufferEnd; nowIt++) {
-            std::print("{}", *nowIt);
-        }
-        std::println("\n============remaining=============");
-        // for (auto nowIt = bufferEnd; nowIt != container.end(); nowIt++) {
-        //     std::print("{}", *nowIt);
-        // }
-        std::println("\n=========================");
         // find the longest match starting from the dictionary's back
         for (auto it = bufferEnd; it != bufferBegin; it--) {
             auto SequenceBegin =
                 std::find_end(dictBegin, dictEnd, bufferBegin, it);
-
-            // std::println("===========dict================");
-            // for (auto nowIt = dictBegin; nowIt != dictEnd; nowIt++) {
-            //     std::print("{}", *nowIt);
-            // }
-            // std::println("\n============query=============");
-            // for (auto nowIt = bufferBegin; nowIt != it; nowIt++) {
-            //     std::print("{}", *nowIt);
-            // }
-            // std::println("\n=============remaining============");
-            // for(auto nowIt = it; nowIt != bufferEnd; nowIt++) {
-            //     std::print("{}", *nowIt);
-            // }
-            // std::println("\n=========================");
 
             if (SequenceBegin != dictEnd) {  // found a match
 
@@ -118,6 +91,26 @@ ls77Encode(const Container& container) {
         if (bufferEnd - bufferBegin > bufferSize) {
             bufferBegin =
                 std::next(bufferBegin, bufferEnd - bufferBegin - bufferSize);
+        }
+    }
+    return result;
+}
+
+template <ContainerConcept Container>
+constexpr Container ls77decode(
+    const std::vector<
+        std::tuple<int, int, std::optional<typename Container::value_type>>>&
+        encoded) {
+    Container result;
+    for (const auto& [offset, length, value] : encoded) {
+        if (length == 0) {
+            result.push_back(value.value());
+        } else {
+            result.insert(result.end(), result.end() - offset,
+                          result.end() - offset + length);
+            if (value.has_value()) {
+                result.push_back(value.value());
+            }
         }
     }
     return result;

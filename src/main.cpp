@@ -60,4 +60,17 @@ int main(int argc, char** argv) {
         }
         std::cout << std::endl;
     }
+
+    constexpr std::string str = "ABABABABAB";
+
+    auto v = ls77Encode<std::string, 1024, 10>(str);
+
+    for (auto tup : v) {
+        std::println(
+            "({0}, {1}, {2})", std::get<0>(tup), std::get<1>(tup),
+            std::get<2>(tup).has_value() ? std::get<2>(tup).value() : ' ');
+    }
+
+    auto decoded = ls77decode<std::string>(v);
+    std::println("{}", decoded);
 }

@@ -3,13 +3,15 @@
 #include <iostream>
 #include <map>
 #include <print>
+#include <ranges>
 
+#include "LS77_compress.hpp"
 #include "matrix.hpp"
 #include "matrix_view.hpp"
 
 using namespace f9ay;
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     Matrix<std::tuple<int, int, int>> mtx(3, 3);
     for (int i = 0; i < 3; i++) {
         for (int j = 0; j < 3; j++) {

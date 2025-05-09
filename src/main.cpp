@@ -6,12 +6,18 @@
 #include <ranges>
 
 #include "LS77_compress.hpp"
+#include "bmp.hpp"
+#include "dct.hpp"
 #include "matrix.hpp"
 #include "matrix_view.hpp"
 
+#ifdef WIN32
+#include "platform/windows_show.hpp"
+#endif
+
 using namespace f9ay;
 
-int main(int argc, char** argv) {
+void test_Matrix() {
     Matrix<std::tuple<int, int, int>> mtx(3, 3);
     for (int i = 0; i < 3; i++) {
         for (int j = 0; j < 3; j++) {
@@ -61,14 +67,66 @@ int main(int argc, char** argv) {
         std::cout << std::endl;
     }
 
-    std::string str = "ABABABABAB";
-    auto v = ls77Encode<decltype(str), 1024, 100>(str);
+    std::println("====================");
+    /*
+    [  [16,  11,  10,  16,  24,  40,  51,  61],
+    [12,  12,  14,  19,  26,  58,  60,  55],
+    [14,  13,  16,  24,  40,  57,  69,  56],
+    [14,  17,  22,  29,  51,  87,  80,  62],
+    [18,  22,  37,  56,  68, 109, 103,  77],
+    [24,  35,  55,  64,  81, 104, 113,  92],
+    [49,  64,  78,  87, 103, 121, 120, 101],
+    [72,  92,  95,  98, 112, 100, 103,  99] ]
+    */
 
-    for (auto tup : v) {
-        std::println(
-            "({0}, {1}, {2})", std::get<0>(tup), std::get<1>(tup),
-            std::get<2>(tup).has_value() ? std::get<2>(tup).value() : ' ');
+    Matrix<float> mtx3 = {{16, 11, 10, 16, 24, 40, 51, 61},
+                          {12, 12, 14, 19, 26, 58, 60, 55},
+                          {14, 13, 16, 24, 40, 57, 69, 56},
+                          {14, 17, 22, 29, 51, 87, 80, 62},
+                          {18, 22, 37, 56, 68, 109, 103, 77},
+                          {24, 35, 55, 64, 81, 104, 113, 92},
+                          {49, 64, 78, 87, 103, 121, 120, 101},
+                          {72, 92, 95, 98, 112, 100, 103, 99}};
+    const auto view3 = Matrix_view(mtx3);
+
+    auto result = Dct<8, 8>::dct(view3);
+
+    std::println("{}", result);
+
+    std::println("======================================");
+
+    Matrix<float> mtx4(8, 8);
+
+    for (auto x : mtx4) {
+        for (auto& y : x) {
+            y = 128;
+        }
     }
-    auto decoded = ls77decode<std::string>(v);
-    std::println("Decoded: {}", decoded);
+
+    const auto view4 = Matrix_view(mtx4);
+
+    auto res2 = Dct<8, 8>::dct(view4);
+
+    std::print("{}", res2);
+    std::println("======================================");
+}
+
+int main(int argc, char** argv) {
+    std::ifstream fs("../test_data/box.bmp", std::ios::binary);
+    if (!fs.is_open()) {
+        std::cerr << "Failed to open file" << std::endl;
+        return 1;
+    }
+    const auto file = readFile(fs);
+    auto result = Bmp().import(file.get());
+    std::cout << "done" << std::endl;
+#ifdef WIN32
+    f9ay::test::windows::Windows windows{};
+    std::visit(
+        [&windows]<typename T>(T&& arg) {
+            using T0 = std::decay_t<T>;
+            windows.show(arg);
+        },
+        result);
+#endif
 }

@@ -1,8 +1,28 @@
-//
-// Created by Tony on 2025/5/8.
-//
+#pragma once
 
-#ifndef IMPORTER_HPP
-#define IMPORTER_HPP
+#ifdef _MSC_VER
+#define __attribute__(x)
+#endif
 
-#endif //IMPORTER_HPP
+#include <fstream>
+
+namespace f9ay {
+
+template <typename STRUCT>
+const STRUCT *safeMemberAssign(const std::byte *source) {
+    // TODO it is unsafe now
+    // use reflect to safe assign
+    auto *dst = reinterpret_cast<const STRUCT *>(source);
+    return dst;
+}
+
+inline std::unique_ptr<std::byte[]> readFile(std::ifstream &fs) {
+    fs.seekg(0, std::ios::end);
+    const auto file_size = fs.tellg();
+    fs.seekg(0, std::ios::beg);
+    std::unique_ptr<std::byte[]> buffer(new std::byte[file_size]);
+    fs.read(reinterpret_cast<char *>(buffer.get()), file_size);
+    return buffer;
+}
+
+};  // namespace f9ay

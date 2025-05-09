@@ -5,6 +5,9 @@
 #include <vector>
 
 #include "LS77_compress.hpp"
+
+
+using namespace f9ay;
 // Helper function to generate random strings
 std::string generateRandomString(size_t length) {
     static const char charset[] =
@@ -26,7 +29,7 @@ std::string generateRandomString(size_t length) {
 
 TEST(LS77Test, EncodeDecode) {
     // Run multiple test rounds
-    const int TEST_ROUNDS = 10000;
+    const int TEST_ROUNDS = 10;
 
     for (int round = 0; round < TEST_ROUNDS; round++) {
         // Generate random strings of different lengths

@@ -4,3 +4,7 @@ struct HuffmanNode {
     HuffmanNode* left;
     HuffmanNode* right;
 };
+
+class HuffmanCoding {
+    
+};

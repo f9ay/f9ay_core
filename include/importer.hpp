@@ -6,6 +6,9 @@
 
 #include <fstream>
 
+#include "colors.hpp"
+#include "matrix.hpp"
+
 namespace f9ay {
 
 template <typename STRUCT>
@@ -24,5 +27,7 @@ inline std::unique_ptr<std::byte[]> readFile(std::ifstream &fs) {
     fs.read(reinterpret_cast<char *>(buffer.get()), file_size);
     return buffer;
 }
+
+using Midway = std::variant<f9ay::Matrix<colors::BGR>, Matrix<colors::BGRA>>;
 
 };  // namespace f9ay

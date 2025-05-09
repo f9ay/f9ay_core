@@ -50,7 +50,9 @@ public:
     result_type import(const std::byte *source) {
         fileHeader = safeMemberAssign<FileHeader>(source);
         infoHeader = safeMemberAssign<InfoHeader>(source + sizeof(FileHeader));
-
+        if (infoHeader->compression == true) {
+            throw std::runtime_error("Unsupported BMP compression");
+        }
         seqRead = infoHeader->height < 0;  // 當 height 為正時 順序讀取
 
         if (infoHeader->bits <= 8 && infoHeader->compression == false) {
@@ -76,13 +78,13 @@ private:
         const auto data = source + fileHeader->offset;
         const auto pixelSize = infoHeader->bits / 8;  // byte
         const auto rowSize = infoHeader->width * pixelSize;
-        const auto rawRowSize = rowSize + (4 - rowSize % 4);  // 填充過後
+        const auto rawRowSize = 4 * (rowSize / 4 + (rowSize % 4 != 0));  // 填充過後
         for (int i = 0; i < infoHeader->height; i++) {
             const std::byte *row = nullptr;
             if (seqRead) {
                 row = data + i * rawRowSize;
             } else {
-                row = data + (infoHeader->height - 1 - i) * rawRowSize;
+                row = data + (std::abs(infoHeader->height) - 1 - i) * rawRowSize;
             }
             for (int j = 0; j < infoHeader->width; j++) {
                 // if constexpr (std::is_same_v<T, colors::BGRA>) {

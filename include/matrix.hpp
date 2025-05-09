@@ -117,15 +117,7 @@ public:
         return RowIterator(data + (rows * cols), cols);
     }
 
-    [[nodiscard]]const T* raw() const {
-        return data;
-    }
-
-    [[nodiscard]]T* raw() {
-        return data;
-    }
-
-        const T &operator[](size_t i, size_t j) const {
+    const T &operator[](size_t i, size_t j) const {
 #ifdef DEBUG
         if (i >= rows || j >= cols) {
             throw std::out_of_range("Index out of range");
@@ -170,16 +162,29 @@ public:
         return cols;
     }
 
+    [[nodiscard]] T *raw() {
+        return data;
+    }
+
+    [[nodiscard]] const T *raw() const {
+        return data;
+    }
+
     Matrix(const int _rows, const int _cols) : rows(_rows), cols(_cols) {
         data = new T[rows * cols]{};
     }
-    Matrix(const Matrix &) = delete;
+    Matrix(const Matrix &mtx) : rows(mtx.rows), cols(mtx.cols) {
+        data = new T[rows * cols]{};
+        for (size_t i = 0; i < rows * cols; i++) {
+            data[i] = mtx.data[i];
+        }
+    }
     Matrix &operator=(const Matrix &) = delete;
     Matrix(Matrix &&other) noexcept
         : data(other.data), rows(other.rows), cols(other.cols) {
         other.data = nullptr;
-        other.rows = -1;
-        other.cols = -1;
+        other.rows = 0;
+        other.cols = 0;
     }
     /*
         {{1, 2, 3},
@@ -189,7 +194,7 @@ public:
     Matrix(std::initializer_list<std::initializer_list<T>> &&list) {
         rows = list.size();
         for (auto &row : list) {
-            cols = std::max(cols, row.size());
+            cols = std::max(cols, static_cast<int>(row.size()));
         }
         data = new T[rows * cols]{};
         int i = 0;

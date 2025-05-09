@@ -23,16 +23,16 @@ file(GLOB_RECURSE HEADERS "include/*.h" "include/*.hpp")
 # add the source files
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 
-# add_compile_definitions(
-#     DEBUG=1
-# )
-
+add_compile_definitions(
+        DEBUG=1
+)
 add_executable(f9ay ${SOURCES} ${HEADERS})
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-target_compile_options(f9ay PRIVATE /FAcs)
+    target_compile_options(f9ay PRIVATE /FAcs)
+    target_link_libraries(f9ay PRIVATE user32 gdi32)
 elseif(CMAKE_CXXCOMPILER_ID STREQUAL "CLANG")
-target_compile_options(f9ay PRIVATE -fverbose-asm --save-temps -fexperimental-library)
+    target_compile_options(f9ay PRIVATE -fverbose-asm --save-temps -fexperimental-library)
 else ()
 # target_compile_definitions(f9ay PRIVATE -fallow-extended-attribute-placement)
 endif()

@@ -33,7 +33,7 @@ public:
     Row(T *const data, const size_t cols) : data(data), cols(cols) {}
     Row(const Row &other) : data(other.data), cols(other.cols) {}
 
-//private:
+    // private:
     T *const data = nullptr;
     const size_t cols = 0;
 };
@@ -117,7 +117,15 @@ public:
         return RowIterator(data + (rows * cols), cols);
     }
 
-    const T &operator[](size_t i, size_t j) const {
+    [[nodiscard]]const T* raw() const {
+        return data;
+    }
+
+    [[nodiscard]]T* raw() {
+        return data;
+    }
+
+        const T &operator[](size_t i, size_t j) const {
 #ifdef DEBUG
         if (i >= rows || j >= cols) {
             throw std::out_of_range("Index out of range");

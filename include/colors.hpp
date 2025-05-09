@@ -4,22 +4,20 @@
 
 namespace f9ay::colors {
 
-// struct RGB : std::tuple<std::byte, std::byte, std::byte> {
-//     using std::tuple<std::byte, std::byte, std::byte>::tuple;
-// };
-// struct BGR : std::tuple<std::byte, std::byte, std::byte> {
-//     using std::tuple<std::byte, std::byte, std::byte>::tuple;
-// };
-// struct RGBA : std::tuple<std::byte, std::byte, std::byte, std::byte> {
-//     using std::tuple<std::byte, std::byte, std::byte, std::byte>::tuple;
-// };
-// struct BGRA : std::tuple<std::byte, std::byte, std::byte, std::byte> {
-//     using std::tuple<std::byte, std::byte, std::byte, std::byte>::tuple;
-// };
+struct BGR {
+    std::byte b, g, r;
+};
 
-using RGB = std::tuple<std::byte, std::byte, std::byte>;
-using BGR = std::tuple<std::byte, std::byte, std::byte>;
-using RGBA = std::tuple<std::byte, std::byte, std::byte, std::byte>;
-using BGRA = std::tuple<std::byte, std::byte, std::byte, std::byte>;
+struct RGB {
+    std::byte r, g, b;
+};
+
+struct BGRA {
+    std::byte b, g, r, a;
+};
+
+struct RGBA {
+    std::byte r, g, b, a;
+};
 
 }  // namespace f9ay::colors

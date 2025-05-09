@@ -385,12 +385,7 @@ public:
     [[nodiscard]] int col() const {
         return origin->col();
     }
-<<<<<<< HEAD
-    Matrix_view(Matrix<Origin_Type> &_origin) : origin(&_origin) {}
-
-=======
     explicit Matrix_view(Matrix<Origin_Type> &_origin) : origin(&_origin) {}
->>>>>>> 23b1881 ([feat] add bmpt importer [test] add windows image shower to debug [test] add test image `box.bmp`)
 private:
     Matrix<Origin_Type> *origin = nullptr;
 };

@@ -11,16 +11,14 @@
 
 namespace f9ay {
 class Bmp {
-#ifdef _MSC_VER
 #pragma pack(push, 1)
-#endif
-    struct FileHeader __attribute__((packed)) {
+    struct FileHeader {
         unsigned short type; /* type : Magic identifier,一般為BM(0x42,0x4d) */
         unsigned int size;   /* File size in bytes,全部的檔案大小 */
         unsigned short reserved1, reserved2; /* 保留欄位 */
         unsigned int offset;                 /* Offset to image data, bytes */
     };
-    struct InfoHeader __attribute__((packed)) {
+    struct InfoHeader {
         unsigned int size;             /* Info Header size in bytes */
         int width, height;             /* Width and height of image */
         unsigned short planes;         /* Number of colour planes */
@@ -31,15 +29,17 @@ class Bmp {
         unsigned int nColours;         /* Number of colours */
         unsigned int importantColours; /* Important colours */
     };
-    struct ColorPalette __attribute__((packed)) {
+    struct ColorPalette {
         std::byte blue;
         std::byte green;
         std::byte red;
         std::byte alpha;
     };
-#ifdef _MSC_VER
 #pragma pack(pop)
-#endif
+    static_assert(sizeof(FileHeader) == 14);
+    static_assert(sizeof(InfoHeader) == 40);
+    static_assert(sizeof(ColorPalette) == 4);
+
 private:
     const FileHeader *fileHeader = nullptr;
     const InfoHeader *infoHeader = nullptr;
@@ -60,12 +60,12 @@ public:
             // RGBA
             Matrix<colors::BGRA> result(infoHeader->height, infoHeader->width);
             read_data(source, result);
-            return result;
+            return std::move(result);
         } else if (infoHeader->bits == 24) {
             // RGB
             Matrix<colors::BGR> result(infoHeader->height, infoHeader->width);
             read_data(source, result);
-            return result;
+            return std::move(result);
         }
         throw std::runtime_error("Unsupported BMP format");
     }
@@ -85,14 +85,15 @@ private:
                 row = data + (infoHeader->height - 1 - i) * rawRowSize;
             }
             for (int j = 0; j < infoHeader->width; j++) {
-                if constexpr (std::is_same_v<T, colors::BGRA>) {
-                    dst[i, j] = {row[j * pixelSize], row[j * pixelSize + 1],
-                                 row[j * pixelSize + 2],
-                                 row[j * pixelSize + 3]};
-                } else if constexpr (std::is_same_v<T, colors::BGR>) {
-                    dst[i, j] = {row[j * pixelSize], row[j * pixelSize + 1],
-                                 row[j * pixelSize + 2]};
-                }
+                // if constexpr (std::is_same_v<T, colors::BGRA>) {
+                //     dst[i, j] = {row[j * pixelSize], row[j * pixelSize + 1],
+                //                  row[j * pixelSize + 2],
+                //                  row[j * pixelSize + 3]};
+                // } else if constexpr (std::is_same_v<T, colors::BGR>) {
+                //     dst[i, j] = {row[j * pixelSize], row[j * pixelSize + 1],
+                //                  row[j * pixelSize + 2]};
+                // }
+                dst[i, j] = *reinterpret_cast<const T *>(&row[j * pixelSize]);
             }
         }
     }

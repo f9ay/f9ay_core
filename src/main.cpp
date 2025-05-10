@@ -1,9 +1,11 @@
 ﻿#include <array>
+#include <filesystem>
 #include <functional>
 #include <iostream>
 #include <map>
 #include <print>
 #include <ranges>
+#include <source_location>
 
 #include "LS77_compress.hpp"
 #include "bmp.hpp"
@@ -112,7 +114,10 @@ void test_Matrix() {
 }
 
 int main(int argc, char** argv) {
-    std::ifstream fs("../test_data/box.bmp", std::ios::binary);
+    std::filesystem::path path = std::source_location::current().file_name();
+    path = path.parent_path().parent_path() / "test_data" / "fire.bmp";
+    std::cout << path << std::endl;
+    std::ifstream fs(path, std::ios::binary);
     if (!fs.is_open()) {
         std::cerr << "Failed to open file" << std::endl;
         return 1;

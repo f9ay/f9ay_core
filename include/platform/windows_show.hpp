@@ -51,16 +51,16 @@ public:
                     if constexpr (std::is_same_v<
                                       std::decay_t<decltype(image[i, j])>,
                                       colors::BGR>) {
-                        auto [b, g, r] = image[i][j];
+                        auto [b, g, r] = image[i, j];
                         const COLORREF colorRef = RGB(r, g, b);
-                        SetPixel(hdc, i, j, colorRef);
+                        SetPixel(hdc, j, i, colorRef);
                     } else if (std::is_same_v<
                                    std::decay_t<decltype(image[i, j])>,
                                    f9ay::colors::BGRA>) {
                         // alpha 通道忽略
-                        auto [b, g, r, a] = image[i][j];
+                        auto [b, g, r, a] = image[i, j];
                         const COLORREF colorRef = RGB(b, g, a);
-                        SetPixel(hdc, i, j, colorRef);
+                        SetPixel(hdc, j, i, colorRef);
                     }
                 }
             }

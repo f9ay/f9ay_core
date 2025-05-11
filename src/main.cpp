@@ -4,12 +4,14 @@
 #include <iostream>
 #include <map>
 #include <print>
+#include <queue>
 #include <ranges>
 #include <source_location>
 
 #include "LS77_compress.hpp"
 #include "bmp.hpp"
 #include "dct.hpp"
+#include "huffman_coding.hpp"
 #include "matrix.hpp"
 #include "matrix_view.hpp"
 
@@ -114,17 +116,44 @@ void test_Matrix() {
 }
 
 int main(int argc, char** argv) {
-    std::filesystem::path path = std::source_location::current().file_name();
-    path = path.parent_path().parent_path() / "test_data" / "fire.bmp";
-    std::cout << path << std::endl;
-    std::ifstream fs(path, std::ios::binary);
-    if (!fs.is_open()) {
-        std::cerr << "Failed to open file" << std::endl;
-        return 1;
+    // std::filesystem::path path = std::source_location::current().file_name();
+    // path = path.parent_path().parent_path() / "test_data" / "fire.bmp";
+    // std::cout << path << std::endl;
+    // std::ifstream fs(path, std::ios::binary);
+    // if (!fs.is_open()) {
+    //     std::cerr << "Failed to open file" << std::endl;
+    //     return 1;
+    // }
+    // const auto file = readFile(fs);
+    // auto result = Bmp().import(file.get());
+    // std::cout << "done" << std::endl;
+
+    // const auto str = "abababa";
+
+    std::vector<int> data;
+    for (int i = 0; i < 5; i++) {
+        data.push_back(20);
     }
-    const auto file = readFile(fs);
-    auto result = Bmp().import(file.get());
-    std::cout << "done" << std::endl;
+    for (int i = 0; i < 6; i++) {
+        data.push_back(60);
+    }
+    for (int i = 0; i < 25; i++) {
+        data.push_back(100);
+    }
+    for (int i = 0; i < 16; i++) {
+        data.push_back(140);
+    }
+
+    for (int i = 0; i < 9; i++) {
+        data.push_back(180);
+    }
+    for (int i = 0; i < 3; i++) {
+        data.push_back(220);
+    }
+    auto huffman = HuffmanCoding<std::vector<int>>();
+    huffman.buildTree(data);
+
+    auto result = huffman.encode();
 #ifdef WIN32
     f9ay::test::windows::Windows windows{};
     std::visit(

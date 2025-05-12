@@ -130,30 +130,41 @@ int main(int argc, char** argv) {
 
     // const auto str = "abababa";
 
-    std::vector<int> data;
-    for (int i = 0; i < 5; i++) {
-        data.push_back(20);
-    }
-    for (int i = 0; i < 6; i++) {
-        data.push_back(60);
-    }
-    for (int i = 0; i < 25; i++) {
-        data.push_back(100);
-    }
-    for (int i = 0; i < 16; i++) {
-        data.push_back(140);
-    }
+    // std::vector<int> data;
+    // for (int i = 0; i < 5; i++) {
+    //     data.push_back(20);
+    // }
+    // for (int i = 0; i < 6; i++) {
+    //     data.push_back(60);
+    // }
+    // for (int i = 0; i < 25; i++) {
+    //     data.push_back(100);
+    // }
+    // for (int i = 0; i < 16; i++) {
+    //     data.push_back(140);
+    // }
 
-    for (int i = 0; i < 9; i++) {
-        data.push_back(180);
-    }
-    for (int i = 0; i < 3; i++) {
-        data.push_back(220);
-    }
-    auto huffman = HuffmanCoding<std::vector<int>>();
+    // for (int i = 0; i < 9; i++) {
+    //     data.push_back(180);
+    // }
+    // for (int i = 0; i < 3; i++) {
+    //     data.push_back(220);
+    // }
+    std::string data = "hello";
+    auto huffman = HuffmanCoding<decltype(data)>();
     huffman.buildTree(data);
 
     auto result = huffman.encode();
+
+    for(auto code : result){
+        auto decoded = huffman.decode(code);
+        std::print("code : ");
+        for (auto& byte : code) {
+            std::print("{0}", (int)byte);
+        }
+        std::println(" decoded : {}", decoded);
+    }
+
 #ifdef WIN32
     f9ay::test::windows::Windows windows{};
     std::visit(

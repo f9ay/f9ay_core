@@ -33,11 +33,46 @@
 //     int _bitBuffer;
 // };
 
+template <typename T>
 struct HuffmanNode {
+    HuffmanNode(size_t freq, T val)
+        : frequency(freq),
+          data(std::make_optional(val)),
+          left(nullptr),
+          right(nullptr) {}
+
+    HuffmanNode(size_t freq, std::unique_ptr<HuffmanNode<T>>& left,
+                std::unique_ptr<HuffmanNode<T>>& right)
+        : frequency(freq),
+          left(std::move(left)),
+          right(std::move(right)),
+          data(std::nullopt) {}
+
     size_t frequency;
-    std::unique_ptr<HuffmanNode> left;
-    std::unique_ptr<HuffmanNode> right;
+    std::optional<T> data;
+    std::unique_ptr<HuffmanNode<T>> left;
+    std::unique_ptr<HuffmanNode<T>> right;
+
+    bool operator==(const HuffmanNode& other) const {
+        return frequency == other.frequency && data == other.data &&
+               left == other.left && right == other.right;
+    }
+    bool operator!=(const HuffmanNode& other) const {
+        return !(*this == other);
+    }
 };
+
+namespace std {
+template <typename T>
+struct hash<HuffmanNode<T>> {
+    size_t operator()(const HuffmanNode<T>& node) const {
+        return std::hash<size_t>()(node.frequency) ^
+               std::hash<std::optional<T>>()(node.data) ^
+               std::hash<std::unique_ptr<HuffmanNode<T>>>()(node.left) ^
+               std::hash<std::unique_ptr<HuffmanNode<T>>>()(node.right);
+    }
+};
+}  // namespace std
 
 template <ContainerConcept Container>
 class HuffmanCoding {
@@ -46,8 +81,10 @@ public:
     ~HuffmanCoding() = default;
 
     void buildTree(Container& data) {
-        std::priority_queue<size_t, std::vector<size_t>, std::greater<size_t>>
-            frequencies;
+        using NodePtr =
+            std::unique_ptr<HuffmanNode<typename Container::value_type>>;
+        std::priority_queue<NodePtr, std::vector<NodePtr>, CompareNodes>
+            nodesPq;
 
         for (auto& element : data) {
             auto findResultIterator = _elementToFrequencyMap.find(element);
@@ -58,24 +95,16 @@ public:
             }
         }
 
-        for (auto& p : _elementToFrequencyMap) {
-            auto element = p.first;
-            auto frequency = p.second;
-
-            _frequencyToElementMap[frequency] = element;
-
+        for (auto& [element, frequency] : _elementToFrequencyMap) {
             std::println("Element: {}, Frequency: {}", element, frequency);
 
-            frequencies.push(frequency);
-
-            auto node = std::make_unique<HuffmanNode>();
-            node->frequency = frequency;
-            node->left = nullptr;
-            node->right = nullptr;
-            _nodesMap[frequency] = std::move(node);
+            auto node =
+                std::make_unique<HuffmanNode<typename Container::value_type>>(
+                    frequency, element);
+            nodesPq.push(std::move(node));
         }
 
-        _recursiveBuildTree(frequencies);
+        _recursiveBuildTree(nodesPq);
     }
 
     std::vector<std::vector<std::byte>> encode() {
@@ -85,87 +114,118 @@ public:
 
         std::vector<std::vector<std::byte>> encodedData;
 
-        for (const auto& [frequency, element] : _frequencyToElementMap) {
+        for (const auto& [element, frequency] : _elementToFrequencyMap) {
             std::vector<std::byte> encodedBytes;
 
-            _getCodeRecursively(_root, frequency, encodedBytes);
+            _getCodeRecursively(_root, element, frequency, encodedBytes);
 
-            std::print("frequency : {0} code : ", frequency);
-            for (auto& byte : encodedBytes) {
-                std::print("{0}", (int)byte);
+            for (auto& [element, code] : _codeMap) {
+                std::print("Element: {}, Code: ", element);
+                encodedData.push_back(code);
+                for (auto& byte : code) {
+                    std::print("{0}", (int)byte);
+                }
+                std::println();
             }
-            std::println("");
-            encodedData.push_back(encodedBytes);
         }
 
         return encodedData;
     }
 
-    void decode(const std::vector<std::byte>& data) {
-        // Implement the decoding logic
+    Container::value_type decode(const std::vector<std::byte>& data) {
+        if (_root == nullptr) {
+            throw std::runtime_error("Huffman tree not built");
+        }
+
+        return _decodeRecursively(data, (size_t)0, _root);
     }
 
 private:
-    void _recursiveBuildTree(auto& frequencies) {
-        if (frequencies.empty()) {
-            throw std::runtime_error("No frequencies available to build tree");
+    struct CompareNodes {
+        using NodePtr =
+            std::unique_ptr<HuffmanNode<typename Container::value_type>>;
+        bool operator()(const NodePtr& lhs, const NodePtr& rhs) const {
+            return lhs->frequency > rhs->frequency;
         }
-        if (frequencies.size() == 1) {
+    };
+
+    void _recursiveBuildTree(auto& nodePq) {
+        using NodePtr =
+            std::unique_ptr<HuffmanNode<typename Container::value_type>>;
+        if (nodePq.empty()) {
+            throw std::runtime_error("No nodePq available to build tree");
+        }
+        if (nodePq.size() == 1) {
             // only one element left, this is the root
-            auto rootFrequency = frequencies.top();
-            frequencies.pop();
-            auto rootNode = std::move(_nodesMap[rootFrequency]);
-            _root = std::move(rootNode);
+            _root = std::move(const_cast<NodePtr&>(nodePq.top()));
+            nodePq.pop();
             return;
         }
 
         // take two smallest frequencies
-        auto leftFrequency = frequencies.top();
-        frequencies.pop();
-        auto rightFrequency = frequencies.top();
-        frequencies.pop();
+        auto leftNode = std::move(const_cast<NodePtr&>(nodePq.top()));
+        nodePq.pop();
+        auto rightNode = std::move(const_cast<NodePtr&>(nodePq.top()));
+        nodePq.pop();
 
-        auto leftNode = std::move(_nodesMap[leftFrequency]);
-        auto rightNode = std::move(_nodesMap[rightFrequency]);
-        auto newNode = std::make_unique<HuffmanNode>();
-        newNode->frequency = leftFrequency + rightFrequency;
+        auto newNode =
+            std::make_unique<HuffmanNode<typename Container::value_type>>(
+                leftNode->frequency + rightNode->frequency, leftNode,
+                rightNode);
 
-        newNode->left = std::move(leftNode);
-        newNode->right = std::move(rightNode);
-        frequencies.push(newNode->frequency);
+        nodePq.push(std::move(newNode));
 
-        std::println("Left: {}, Right: {}, New Node: {}", leftFrequency,
-                     rightFrequency, newNode->frequency);
-
-        _nodesMap[newNode->frequency] = std::move(newNode);
-
-        _recursiveBuildTree(frequencies);
+        _recursiveBuildTree(nodePq);
     }
 
-    void _getCodeRecursively(std::unique_ptr<HuffmanNode>& node,
-                             const size_t freq,
-                             std::vector<std::byte>& encodedData) {
-        if (node == nullptr) {
-            return;
-        }
-
+    void _getCodeRecursively(
+        std::unique_ptr<HuffmanNode<typename Container::value_type>>& node,
+        const typename Container::value_type& element, const size_t freq,
+        std::vector<std::byte> encodedData) {
         if (node->left == nullptr && node->right == nullptr) {
+            if (node->data.value() == element) {
+                _codeMap[element] = encodedData;
+            }
             return;
         }
 
-        if (node->left->frequency == freq) {
+        if (node->left) {
             encodedData.push_back(std::byte{0});
-            _getCodeRecursively(node->left, freq, encodedData);
-        } else {
-            encodedData.push_back(std::byte{1});
-            _getCodeRecursively(node->right, freq, encodedData);
+            _getCodeRecursively(node->left, element, freq, encodedData);
         }
+        if (node->right) {
+            encodedData.push_back(std::byte{1});
+            _getCodeRecursively(node->right, element, freq, encodedData);
+        }
+
+        // if left is not leaf node and right is not leaf node
     }
 
-    std::unique_ptr<HuffmanNode> _root;
-    std::unordered_map<size_t, typename Container::value_type>
-        _frequencyToElementMap;
+    Container::value_type _decodeRecursively(
+        std::vector<std::byte> data, size_t index,
+        std::unique_ptr<HuffmanNode<typename Container::value_type>>& node) {
+        if (!node) {
+            throw std::runtime_error("Invalid code");
+        }
+
+        if (index >= data.size()) {
+            if (node->data.has_value()) {
+                return node->data.value();
+            } else {
+                throw std::runtime_error("Invalid data");
+            }
+        }
+
+        if (data[index] == std::byte{0}) {
+            return _decodeRecursively(data, index + 1, node->left);
+
+        } else {
+            return _decodeRecursively(data, index + 1, node->right);
+        }
+    }
+    std::unique_ptr<HuffmanNode<typename Container::value_type>> _root;
+    std::unordered_map<typename Container::value_type, std::vector<std::byte>>
+        _codeMap;
     std::unordered_map<typename Container::value_type, size_t>
         _elementToFrequencyMap;
-    std::unordered_map<size_t, std::unique_ptr<HuffmanNode>> _nodesMap;
 };

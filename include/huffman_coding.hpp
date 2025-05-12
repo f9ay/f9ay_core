@@ -80,7 +80,7 @@ public:
     HuffmanCoding() = default;
     ~HuffmanCoding() = default;
 
-    void buildTree(Container& data) {
+    void buildTree(const Container& data) {
         using NodePtr =
             std::unique_ptr<HuffmanNode<typename Container::value_type>>;
         std::priority_queue<NodePtr, std::vector<NodePtr>, CompareNodes>
@@ -107,29 +107,17 @@ public:
         _recursiveBuildTree(nodesPq);
     }
 
-    std::vector<std::vector<std::byte>> encode() {
+    std::unordered_map<typename Container::value_type, std::vector<std::byte>>
+    encode() {
         if (_root == nullptr) {
             throw std::runtime_error("Huffman tree not built");
         }
 
-        std::vector<std::vector<std::byte>> encodedData;
-
         for (const auto& [element, frequency] : _elementToFrequencyMap) {
-            std::vector<std::byte> encodedBytes;
-
-            _getCodeRecursively(_root, element, frequency, encodedBytes);
-
-            for (auto& [element, code] : _codeMap) {
-                std::print("Element: {}, Code: ", element);
-                encodedData.push_back(code);
-                for (auto& byte : code) {
-                    std::print("{0}", (int)byte);
-                }
-                std::println();
-            }
+            _getCodeRecursively(_root, element, frequency, {});
         }
 
-        return encodedData;
+        return _codeMap;
     }
 
     Container::value_type decode(const std::vector<std::byte>& data) {
@@ -138,6 +126,14 @@ public:
         }
 
         return _decodeRecursively(data, (size_t)0, _root);
+    }
+
+    std::unordered_map<typename Container::value_type, std::vector<std::byte>>
+    getCodeMap() {
+        if (_root == nullptr) {
+            throw std::runtime_error("Huffman tree not built");
+        }
+        return _codeMap;
     }
 
 private:
@@ -192,6 +188,7 @@ private:
         if (node->left) {
             encodedData.push_back(std::byte{0});
             _getCodeRecursively(node->left, element, freq, encodedData);
+            encodedData.pop_back();
         }
         if (node->right) {
             encodedData.push_back(std::byte{1});
@@ -201,7 +198,7 @@ private:
         // if left is not leaf node and right is not leaf node
     }
 
-    Container::value_type _decodeRecursively(
+    typename Container::value_type _decodeRecursively(
         std::vector<std::byte> data, size_t index,
         std::unique_ptr<HuffmanNode<typename Container::value_type>>& node) {
         if (!node) {

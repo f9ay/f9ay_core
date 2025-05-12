@@ -6,7 +6,6 @@
 
 #include "LS77_compress.hpp"
 
-
 using namespace f9ay;
 // Helper function to generate random strings
 std::string generateRandomString(size_t length) {
@@ -48,7 +47,7 @@ TEST(LS77Test, EncodeDecode) {
 
             for (const auto& [dictSize, bufferSize] : params) {
                 // Encode the string
-                auto encoded = ls77Encode<std::string, 1024, 10>(original);
+                auto encoded = ls77Encode(original);
 
                 // Decode the encoded data
                 auto decoded = ls77decode<std::string>(encoded);
@@ -79,7 +78,7 @@ TEST(LS77Test, SpecificPatterns) {
 
     for (const auto& pattern : patterns) {
         // Encode the string
-        auto encoded = ls77Encode<std::string>(pattern);
+        auto encoded = ls77Encode(pattern);
 
         // Decode the encoded data
         auto decoded = ls77decode<std::string>(encoded);

@@ -11,7 +11,7 @@
 #include "container_concept.hpp"
 
 namespace f9ay {
-template <ContainerConcept Container, int dictSize = 256, int bufferSize = 8>
+template <int dictSize = 4096, int bufferSize = 10, ContainerConcept Container>
 inline constexpr auto ls77Encode(const Container& container) {
     std::vector<
         std::tuple<int, int, std::optional<typename Container::value_type>>>

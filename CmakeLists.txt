@@ -48,3 +48,13 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 endif()
 
 add_test(NAME ls77_test COMMAND ls77_test)  
+
+
+# add_executable(huffman_test test/huffman_test.cpp)
+# target_include_directories(huffman_test PRIVATE ${GTEST_INCLUDE_DIRS} include/huffman_coding.hpp)
+# target_link_libraries(huffman_test PRIVATE gtest_main)
+# if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+#     target_compile_options(huffman_test PRIVATE /FAcs /MTd)
+#     target_link_libraries(huffman_test PRIVATE user32 gdi32)
+# endif()
+# add_test(NAME huffman_test COMMAND huffman_test)

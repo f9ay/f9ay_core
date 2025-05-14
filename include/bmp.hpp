@@ -40,41 +40,47 @@ class Bmp {
     static_assert(sizeof(InfoHeader) == 40);
     static_assert(sizeof(ColorPalette) == 4);
 
-private:
-    const FileHeader *fileHeader = nullptr;
-    const InfoHeader *infoHeader = nullptr;
-    bool seqRead = false;
 
 public:
-    using result_type = std::variant<Matrix<colors::BGR>, Matrix<colors::BGRA>>;
-    result_type import(const std::byte *source) {
-        fileHeader = safeMemberAssign<FileHeader>(source);
-        infoHeader = safeMemberAssign<InfoHeader>(source + sizeof(FileHeader));
+    static Midway import(const std::byte *source) {
+        const FileHeader *fileHeader = safeMemberAssign<FileHeader>(source);
+        const InfoHeader *infoHeader = safeMemberAssign<InfoHeader>(source + sizeof(FileHeader));
         if (infoHeader->compression == true) {
             throw std::runtime_error("Unsupported BMP compression");
         }
-        seqRead = infoHeader->height < 0;  // 當 height 為正時 順序讀取
+
 
         if (infoHeader->bits <= 8 && infoHeader->compression == false) {
             // read ColorPalette 先不管
         }
         if (infoHeader->bits == 32) {
-            // RGBA
+            // BGRA
             Matrix<colors::BGRA> result(infoHeader->height, infoHeader->width);
-            read_data(source, result);
-            return std::move(result);
-        } else if (infoHeader->bits == 24) {
-            // RGB
+            read_data(source, result, fileHeader, infoHeader);
+            return result;
+        }
+        if (infoHeader->bits == 24) {
+            // BGR
             Matrix<colors::BGR> result(infoHeader->height, infoHeader->width);
-            read_data(source, result);
-            return std::move(result);
+            read_data(source, result, fileHeader, infoHeader);
+            return result;
         }
         throw std::runtime_error("Unsupported BMP format");
     }
 
+    template<MATRIX_CONCEPT Matrix_Type>
+    static std::unique_ptr<std::byte[]> write(Matrix_Type mtx) {
+        FileHeader fileHeader;
+        fileHeader.type = 0x42 << 1 | 0x4d;
+        InfoHeader infoHeader;
+        infoHeader.size = sizeof(InfoHeader);
+        return nullptr;
+    }
+
 private:
     template <typename T>
-    void read_data(const std::byte *source, Matrix<T> &dst) {
+    static void read_data(const std::byte *source, Matrix<T> &dst, const FileHeader *fileHeader, const InfoHeader *infoHeader) {
+        const bool seqRead = infoHeader->height < 0;  // 當 height 為正時 順序讀取
         const auto data = source + fileHeader->offset;
         const auto pixelSize = infoHeader->bits / 8;  // byte
         const auto rowSize = infoHeader->width * pixelSize;
@@ -87,14 +93,6 @@ private:
                 row = data + (std::abs(infoHeader->height) - 1 - i) * rawRowSize;
             }
             for (int j = 0; j < infoHeader->width; j++) {
-                // if constexpr (std::is_same_v<T, colors::BGRA>) {
-                //     dst[i, j] = {row[j * pixelSize], row[j * pixelSize + 1],
-                //                  row[j * pixelSize + 2],
-                //                  row[j * pixelSize + 3]};
-                // } else if constexpr (std::is_same_v<T, colors::BGR>) {
-                //     dst[i, j] = {row[j * pixelSize], row[j * pixelSize + 1],
-                //                  row[j * pixelSize + 2]};
-                // }
                 dst[i, j] = *reinterpret_cast<const T *>(&row[j * pixelSize]);
             }
         }

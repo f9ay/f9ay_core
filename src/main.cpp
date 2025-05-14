@@ -128,8 +128,7 @@ int main(int argc, char** argv) {
 #ifdef WIN32
     f9ay::test::windows::Windows windows{};
     std::visit(
-        [&windows]<typename T>(T&& arg) {
-            using T0 = std::decay_t<T>;
+        [&windows](auto&& arg) {
             windows.show(arg);
         },
         result);

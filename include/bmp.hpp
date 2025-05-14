@@ -8,6 +8,7 @@
 #include "importer.hpp"
 #include "matrix.hpp"
 #include "matrix_concept.hpp"
+#include "util.hpp"
 
 namespace f9ay {
 class Bmp {
@@ -40,15 +41,14 @@ class Bmp {
     static_assert(sizeof(InfoHeader) == 40);
     static_assert(sizeof(ColorPalette) == 4);
 
-
 public:
     static Midway import(const std::byte *source) {
         const FileHeader *fileHeader = safeMemberAssign<FileHeader>(source);
-        const InfoHeader *infoHeader = safeMemberAssign<InfoHeader>(source + sizeof(FileHeader));
+        const InfoHeader *infoHeader =
+            safeMemberAssign<InfoHeader>(source + sizeof(FileHeader));
         if (infoHeader->compression == true) {
             throw std::runtime_error("Unsupported BMP compression");
         }
-
 
         if (infoHeader->bits <= 8 && infoHeader->compression == false) {
             // read ColorPalette 先不管
@@ -68,29 +68,63 @@ public:
         throw std::runtime_error("Unsupported BMP format");
     }
 
-    template<MATRIX_CONCEPT Matrix_Type>
-    static std::unique_ptr<std::byte[]> write(Matrix_Type mtx) {
-        FileHeader fileHeader;
-        fileHeader.type = 0x42 << 1 | 0x4d;
-        InfoHeader infoHeader;
+    template <MATRIX_CONCEPT Matrix_Type>
+    static std::pair<std::unique_ptr<std::byte[]>, size_t> write(
+        Matrix_Type mtx) {
+        using value_type = std::decay_t<decltype(mtx[0, 0])>;
+        constexpr auto element_size = sizeof(value_type);
+        const auto rawRowSize = align<4>(mtx.col() * element_size);
+        const auto size =
+            sizeof(FileHeader) + sizeof(InfoHeader) + rawRowSize * mtx.row();
+        std::unique_ptr<std::byte[]> result(new std::byte[size]);
+        FileHeader fileHeader{};
+        fileHeader.type = 0x4D42;
+        fileHeader.size = size;
+        fileHeader.offset = sizeof(FileHeader) + sizeof(InfoHeader);
+        InfoHeader infoHeader{};
         infoHeader.size = sizeof(InfoHeader);
-        return nullptr;
+        infoHeader.width = mtx.col();
+        infoHeader.height = mtx.row();
+        infoHeader.planes = 1;
+        infoHeader.bits = element_size * 8;
+        infoHeader.compression = false;
+        infoHeader.imagesize = mtx.col() * mtx.row() * sizeof(value_type);
+
+        //////////////////////////////////////////
+        auto it = std::copy(reinterpret_cast<std::byte *>(&fileHeader),
+                            reinterpret_cast<std::byte *>(&fileHeader + 1),
+                            result.get());
+        it = std::copy(reinterpret_cast<std::byte *>(&infoHeader),
+                       reinterpret_cast<std::byte *>(&infoHeader + 1), it);
+        auto data = it;
+
+        for (int i = 0; i < mtx.row(); i++) {
+            std::byte *row = data + (std::abs(mtx.row()) - 1 - i) * rawRowSize;
+            for (int j = 0; j < mtx.col(); j++) {
+                reinterpret_cast<value_type *>(row)[j] = mtx[i, j];
+            }
+        }
+
+        return {std::move(result), size};
     }
 
 private:
     template <typename T>
-    static void read_data(const std::byte *source, Matrix<T> &dst, const FileHeader *fileHeader, const InfoHeader *infoHeader) {
-        const bool seqRead = infoHeader->height < 0;  // 當 height 為正時 順序讀取
+    static void read_data(const std::byte *source, Matrix<T> &dst,
+                          const FileHeader *fileHeader,
+                          const InfoHeader *infoHeader) {
+        const bool seqRead =
+            infoHeader->height < 0;  // 當 height 為負時 順序讀取
         const auto data = source + fileHeader->offset;
         const auto pixelSize = infoHeader->bits / 8;  // byte
         const auto rowSize = infoHeader->width * pixelSize;
-        const auto rawRowSize = 4 * (rowSize / 4 + (rowSize % 4 != 0));  // 填充過後
-        for (int i = 0; i < infoHeader->height; i++) {
+        const auto rawRowSize = align<4>(rowSize);
+        for (int i = 0; i < std::abs(infoHeader->height); i++) {
             const std::byte *row = nullptr;
             if (seqRead) {
                 row = data + i * rawRowSize;
             } else {
-                row = data + (std::abs(infoHeader->height) - 1 - i) * rawRowSize;
+                row = data + (infoHeader->height - 1 - i) * rawRowSize;
             }
             for (int j = 0; j < infoHeader->width; j++) {
                 dst[i, j] = *reinterpret_cast<const T *>(&row[j * pixelSize]);

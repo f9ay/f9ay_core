@@ -40,7 +40,7 @@ endif()
 
 enable_testing()
 add_executable(ls77_test test/ls77_test.cpp)
-target_include_directories(ls77_test PRIVATE ${GTEST_INCLUDE_DIRS} include/LS77_compress.hpp)
+target_include_directories(ls77_test PRIVATE ${GTEST_INCLUDE_DIRS} include/lz77_compress.hpp)
 target_link_libraries(ls77_test PRIVATE gtest_main) 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     target_compile_options(ls77_test PRIVATE /FAcs /MTd)

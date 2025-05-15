@@ -8,7 +8,7 @@
 #include <ranges>
 #include <source_location>
 
-#include "LS77_compress.hpp"
+#include "lz77_compress.hpp"
 #include "bmp.hpp"
 #include "dct.hpp"
 #include "huffman_coding.hpp"

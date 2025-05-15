@@ -33,6 +33,7 @@
 //     int _bitBuffer;
 // };
 
+namespace f9ay {
 template <typename T>
 struct HuffmanNode {
     HuffmanNode(size_t freq, T val)
@@ -62,18 +63,6 @@ struct HuffmanNode {
     }
 };
 
-namespace std {
-template <typename T>
-struct hash<HuffmanNode<T>> {
-    size_t operator()(const HuffmanNode<T>& node) const {
-        return std::hash<size_t>()(node.frequency) ^
-               std::hash<std::optional<T>>()(node.data) ^
-               std::hash<std::unique_ptr<HuffmanNode<T>>>()(node.left) ^
-               std::hash<std::unique_ptr<HuffmanNode<T>>>()(node.right);
-    }
-};
-}  // namespace std
-
 template <ContainerConcept Container>
 class HuffmanCoding {
 public:
@@ -96,8 +85,6 @@ public:
         }
 
         for (auto& [element, frequency] : _elementToFrequencyMap) {
-            std::println("Element: {}, Frequency: {}", element, frequency);
-
             auto node =
                 std::make_unique<HuffmanNode<typename Container::value_type>>(
                     frequency, element);
@@ -141,6 +128,15 @@ private:
         using NodePtr =
             std::unique_ptr<HuffmanNode<typename Container::value_type>>;
         bool operator()(const NodePtr& lhs, const NodePtr& rhs) const {
+            if (lhs->frequency == rhs->frequency) {
+                if (lhs->data.has_value() && rhs->data.has_value()) {
+                    return lhs->data.value() > rhs->data.value();
+                } else if (lhs->data.has_value()) {
+                    return true;
+                } else if (rhs->data.has_value()) {
+                    return false;
+                }
+            }
             return lhs->frequency > rhs->frequency;
         }
     };
@@ -226,3 +222,4 @@ private:
     std::unordered_map<typename Container::value_type, size_t>
         _elementToFrequencyMap;
 };
+}  // namespace f9ay

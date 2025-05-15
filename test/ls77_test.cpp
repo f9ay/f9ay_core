@@ -4,8 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "LS77_compress.hpp"
-
+#include "lz77_compress.hpp"
 
 using namespace f9ay;
 // Helper function to generate random strings
@@ -48,10 +47,10 @@ TEST(LS77Test, EncodeDecode) {
 
             for (const auto& [dictSize, bufferSize] : params) {
                 // Encode the string
-                auto encoded = ls77Encode<std::string, 1024, 10>(original);
+                auto encoded = lz77Encode(original);
 
                 // Decode the encoded data
-                auto decoded = ls77decode<std::string>(encoded);
+                auto decoded = lz77decode<std::string>(encoded);
 
                 // Verify the decoded string matches the original
                 ASSERT_EQ(original, decoded)
@@ -79,10 +78,10 @@ TEST(LS77Test, SpecificPatterns) {
 
     for (const auto& pattern : patterns) {
         // Encode the string
-        auto encoded = ls77Encode<std::string>(pattern);
+        auto encoded = lz77Encode(pattern);
 
         // Decode the encoded data
-        auto decoded = ls77decode<std::string>(encoded);
+        auto decoded = lz77decode<std::string>(encoded);
 
         // Verify the decoded string matches the original
         ASSERT_EQ(pattern, decoded) << "Failed pattern: " << pattern;

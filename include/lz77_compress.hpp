@@ -12,7 +12,7 @@
 
 namespace f9ay {
 template <int dictSize = 4096, int bufferSize = 10, ContainerConcept Container>
-inline constexpr auto ls77Encode(const Container& container) {
+inline constexpr auto lz77Encode(const Container& container) {
     std::vector<
         std::tuple<int, int, std::optional<typename Container::value_type>>>
         result;
@@ -87,7 +87,7 @@ inline constexpr auto ls77Encode(const Container& container) {
 }
 
 template <PushableContainerConcept Container>
-inline constexpr auto ls77decode(auto encoded) {
+inline constexpr auto lz77decode(auto encoded) {
     Container result;
 
     for (auto [offset, length, value] : encoded) {

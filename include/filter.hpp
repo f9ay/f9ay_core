@@ -1,10 +1,11 @@
+#pragma once
 #include <cmath>
 
 #include "matrix_concept.hpp"
 
 enum class FilterType { None, Sub, Up, Average, Paeth };
 
-namespace f9ay {
+namespace f9ay::deflate {
 template <FilterType filterType, MATRIX_CONCEPT Matrix>
 inline constexpr Matrix filter(const Matrix& matrix) {
     auto filteredMatrix = matrix;
@@ -58,4 +59,4 @@ inline constexpr Matrix filter(const Matrix& matrix) {
 
     return filteredMatrix;
 }
-}  // namespace f9ay
+}  // namespace f9ay::deflate

@@ -128,6 +128,15 @@ private:
         using NodePtr =
             std::unique_ptr<HuffmanNode<typename Container::value_type>>;
         bool operator()(const NodePtr& lhs, const NodePtr& rhs) const {
+            if (lhs->frequency == rhs->frequency) {
+                if (lhs->data.has_value() && rhs->data.has_value()) {
+                    return lhs->data.value() > rhs->data.value();
+                } else if (lhs->data.has_value()) {
+                    return true;
+                } else if (rhs->data.has_value()) {
+                    return false;
+                }
+            }
             return lhs->frequency > rhs->frequency;
         }
     };

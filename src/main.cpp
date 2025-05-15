@@ -8,10 +8,9 @@
 #include <ranges>
 #include <source_location>
 
-#include "LS77_compress.hpp"
+#include "lz77_compress.hpp"
 #include "bmp.hpp"
 #include "dct.hpp"
-#include "filter.hpp"
 #include "huffman_coding.hpp"
 #include "matrix.hpp"
 #include "matrix_view.hpp"
@@ -52,7 +51,6 @@ void test_Matrix() {
         }
         std::cout << std::endl;
     }
-
     /////////////////////////////
     /// rumtime///////////////////
     /////////////////////////////
@@ -93,7 +91,6 @@ void test_Matrix() {
                           {24, 35, 55, 64, 81, 104, 113, 92},
                           {49, 64, 78, 87, 103, 121, 120, 101},
                           {72, 92, 95, 98, 112, 100, 103, 99}};
-
     const auto view3 = Matrix_view(mtx3);
 
     auto result = Dct<8, 8>::dct(view3);
@@ -128,52 +125,6 @@ int main(int argc, char** argv) {
         return 1;
     }
     const auto file = readFile(fs);
-    auto result = Bmp().import(file.get());
-    std::cout << "done" << std::endl;
-
-    // const auto str = "abababa";
-
-    std::vector<int> data;
-    for (int i = 0; i < 5; i++) {
-        data.push_back(20);
-    }
-    for (int i = 0; i < 6; i++) {
-        data.push_back(60);
-    }
-    for (int i = 0; i < 25; i++) {
-        data.push_back(100);
-    }
-    for (int i = 0; i < 16; i++) {
-        data.push_back(140);
-    }
-
-    for (int i = 0; i < 9; i++) {
-        data.push_back(180);
-    }
-    for (int i = 0; i < 3; i++) {
-        data.push_back(220);
-    }
-    // std::string data = "abababa";
-    auto huffman = HuffmanCoding<decltype(data)>();
-    huffman.buildTree(data);
-
-    auto encoded = huffman.encode();
-
-    for (auto& [element, code] : encoded) {
-        std::print("element : {} code : ", element);
-
-        for (auto& c : code) {
-            std::print("{}", (int)c);
-        }
-        std::println("");
-    }
-
-    // get encoded size
-    size_t size = 0;
-    for (auto& element : data) {
-        size += encoded[element].size();
-    }
-    const auto file = readFile(fs);
     auto result = Bmp::import(file.get());
     std::unique_ptr<std::byte[]> buffer;
     size_t sz;
@@ -184,14 +135,6 @@ int main(int argc, char** argv) {
     std::ofstream out(path.parent_path() / "fire_converted.bmp",
                       std::ios::binary);
     out.write(reinterpret_cast<const char*>(buffer.get()), sz);
-
-    std::visit(
-        [&](auto&& img) {
-            std::println("{}", img);
-            auto filtered = f9ay::filter<FilterType::Sub>(img);
-            std::println("{}", filtered);
-        },
-        result);
 
 #ifdef WIN32
     f9ay::test::windows::Windows windows{};

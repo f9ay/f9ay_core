@@ -186,6 +186,16 @@ public:
         other.rows = 0;
         other.cols = 0;
     }
+
+    Matrix inverse() const {
+        Matrix result(cols, rows);
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                result[j, i] = data[i * cols + j];
+            }
+        }
+        return result;
+    }
     /*
         {{1, 2, 3},
          {4, 5, 6},

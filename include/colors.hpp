@@ -15,7 +15,7 @@ struct BGR {
             std::byte(static_cast<char>(r) + static_cast<char>(other.r))};
     }
     BGR operator+(int val) const {
-        return BGR{std::byte(static_cast<char>(b) + val),
+        return {std::byte(static_cast<char>(b) + val),
                    std::byte(static_cast<char>(g) + val),
                    std::byte(static_cast<char>(r) + val)};
     }
@@ -341,7 +341,7 @@ struct std::formatter<f9ay::colors::BGR, Char_T>
     : std::formatter<std::string, Char_T> {
     auto format(const f9ay::colors::BGR& color, auto& ctx) const {
         return std::format_to(
-            ctx.out(), "BGR({}, {}, {})", std::to_integer<int>(color.b),
+            ctx.out(), "({}, {}, {})", std::to_integer<int>(color.b),
             std::to_integer<int>(color.g), std::to_integer<int>(color.r));
     }
 };
@@ -350,7 +350,7 @@ struct std::formatter<f9ay::colors::RGB, Char_T>
     : std::formatter<std::string, Char_T> {
     auto format(const f9ay::colors::RGB& color, auto& ctx) const {
         return std::format_to(
-            ctx.out(), "RGB({}, {}, {})", std::to_integer<int>(color.r),
+            ctx.out(), "({}, {}, {})", std::to_integer<int>(color.r),
             std::to_integer<int>(color.g), std::to_integer<int>(color.b));
     }
 };
@@ -359,7 +359,7 @@ struct std::formatter<f9ay::colors::BGRA, Char_T>
     : std::formatter<std::string, Char_T> {
     auto format(const f9ay::colors::BGRA& color, auto& ctx) const {
         return std::format_to(
-            ctx.out(), "BGRA({}, {}, {}, {})", std::to_integer<int>(color.b),
+            ctx.out(), "({}, {}, {}, {})", std::to_integer<int>(color.b),
             std::to_integer<int>(color.g), std::to_integer<int>(color.r),
             std::to_integer<int>(color.a));
     }
@@ -369,7 +369,7 @@ struct std::formatter<f9ay::colors::RGBA, Char_T>
     : std::formatter<std::string, Char_T> {
     auto format(const f9ay::colors::RGBA& color, auto& ctx) const {
         return std::format_to(
-            ctx.out(), "RGBA({}, {}, {}, {})", std::to_integer<int>(color.r),
+            ctx.out(), "({}, {}, {}, {})", std::to_integer<int>(color.r),
             std::to_integer<int>(color.g), std::to_integer<int>(color.b),
             std::to_integer<int>(color.a));
     }

@@ -253,7 +253,8 @@ struct BGRA {
         return !(*this == other);
     }
     bool operator<(const BGRA& other) const {
-        return std::tie(b, g, r, a) < std::tie(other.b, other.g, other.r, other.a);
+        return std::tie(b, g, r, a) <
+               std::tie(other.b, other.g, other.r, other.a);
     }
 };
 
@@ -346,7 +347,8 @@ struct RGBA {
         return !(*this == other);
     }
     bool operator<(const RGBA& other) const {
-        return std::tie(r, g, b, a) < std::tie(other.r, other.g, other.b, other.a);
+        return std::tie(r, g, b, a) <
+               std::tie(other.r, other.g, other.b, other.a);
     }
 };
 inline int abs(const BGR& color) {
@@ -450,4 +452,6 @@ struct hash<f9ay::colors::RGBA> {
                std::hash<std::byte>()(color.a);
     }
 };
+
+
 }  // namespace std

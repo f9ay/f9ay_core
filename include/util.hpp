@@ -35,20 +35,27 @@ public:
         }
 
         if (bit) {
-            _buffer.back() |= std::byte{0b00000001} << (7 - _bitPos);
+            _buffer.back() |=
+                std::byte{static_cast<unsigned char>(1 << (7 - _bitPos))};
         }
 
         _bitPos++;
     }
 
-    void writeBits(std::byte bits, size_t count) {
-        for (size_t i = 0; i < count; i++) {
-            writeBit(static_cast<bool>(bits >> i & std::byte{0b00000001}));
+    template <typename T>
+    void writeBits(T data, int count) {
+        for (int i = count - 1; i >= 0; i--) {
+            // ex : 0b00000000000001101 count = 5
+            // write 0b01101 to the buffer
+            writeBit(static_cast<bool>(data >> i & T{1}));
         }
     }
-
-    size_t getBitPos() const {
+    [[nodiscard]] size_t getBitPos() const {
         return _bitPos;
+    }
+
+    [[nodiscard]] std::vector<std::byte> getBuffer() const {
+        return _buffer;
     }
 
 private:

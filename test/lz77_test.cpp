@@ -47,7 +47,7 @@ TEST(LS77Test, EncodeDecode) {
 
             for (const auto& [dictSize, bufferSize] : params) {
                 // Encode the string
-                auto encoded = LZ77::lz77EncodeFast(original);
+                auto encoded = LZ77::lz77Encode(original);
 
                 // Decode the encoded data
                 auto decoded = LZ77::lz77decode<std::string>(encoded);
@@ -78,7 +78,7 @@ TEST(LS77Test, SpecificPatterns) {
 
     for (const auto& pattern : patterns) {
         // Encode the string
-        auto encoded = LZ77::lz77EncodeFast(pattern);
+        auto encoded = LZ77::lz77Encode(pattern);
 
         // Decode the encoded data
         auto decoded = LZ77::lz77decode<std::string>(encoded);

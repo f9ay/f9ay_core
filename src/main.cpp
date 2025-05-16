@@ -118,58 +118,45 @@ void test_Matrix() {
 
 int main(int argc, char** argv) {
     std::filesystem::path path = std::source_location::current().file_name();
-    path = path.parent_path().parent_path() / "test_data" / "test.png";
-    // std::cout << path << std::endl;
-    // std::ifstream fs(path, std::ios::binary);
-    // if (!fs.is_open()) {
-    //     std::cerr << "Failed to open file" << std::endl;
-    //     return 1;
-    // }
-    // const auto file = readFile(fs);
-    // auto result = Bmp::import(file.get());
-    // std::unique_ptr<std::byte[]> buffer;
-    // size_t sz;
-    // std::visit(
-    //     [&buffer, &sz](auto&& arg) {
+    path = path.parent_path().parent_path() / "test_data" / "fire.bmp";
+    std::cout << path << std::endl;
+    std::ifstream fs(path, std::ios::binary);
+    if (!fs.is_open()) {
+        std::cerr << "Failed to open file" << std::endl;
+        return 1;
+    }
+    const auto file = readFile(fs);
+    auto result = Bmp::import(file.get());
+    std::unique_ptr<std::byte[]> buffer;
+    size_t sz;
+    std::visit(
+        [&buffer, &sz, &path](auto&& arg) {
             // std::tie(buffer, sz) = Bmp::write(arg);
-            // auto filtered = deflate::filter(arg, FilterType::Sub);
-            // auto flattened = filtered.flattenToSpan();
-            // // std::println("{}", flattened);
-            // // auto encoded = lz77Encode(flattened);
-            // HuffmanCoding<decltype(flattened)> huffman;
-            // huffman.buildTree(flattened);
-            // auto codeMap = huffman.encode();
 
-            // size_t encodedSize = 0;
+            std::ofstream out(path.parent_path() / "test.png",
+                              std::ios::binary);
 
-            // for(auto value : flattened){
-            //     encodedSize += codeMap[value].size();
-            // }
-
-            // auto vec = LZ77::lz77Encode(flattened);
-
-            // std::println("original size: {}", flattened.size());
-            // std::println("encoded size: {}", vec.size());
-        // },
-        // result);
+            auto [buffer, size] = PNG::exportToByte(arg, FilterType::Paeth);
+            out.write(reinterpret_cast<const char*>(buffer.get()), size);
+        },
+        result);
 
     Matrix<colors::BGR> mtx(3, 3);
 
     std::ofstream out(path.parent_path() / "fire_converted.bmp",
                       std::ios::binary);
 
-    std::ofstream fs(path);
+    // std::ofstream fs(path);
 
-    auto [buffer, size] = PNG::exportToByte(mtx, FilterType::Paeth);
-    fs.write(reinterpret_cast<const char*>(buffer.get()), size);
+    // auto [buffer, size] = PNG::exportToByte(mtx, FilterType::Paeth);
+    // fs.write(reinterpret_cast<const char*>(buffer.get()), size);
 
     std::string test = "aacaacabcabaaac";
 
     auto vec = LZ77::lz77Encode(test);
-    for(auto [offset, length, value] : vec) {
+    for (auto [offset, length, value] : vec) {
         std::cout << "Offset: " << offset << ", Length: " << length
-                  << ", Value: " << (value.has_value() ? *value : ' ') <<
-                  "\n";
+                  << ", Value: " << (value.has_value() ? *value : ' ') << "\n";
     }
 
 #ifdef WIN32

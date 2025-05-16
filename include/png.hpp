@@ -7,10 +7,10 @@
 #include <memory>
 #include <vector>
 
+#include "deflate.hpp"
 #include "filter.hpp"
 #include "matrix_concept.hpp"
 #include "util.hpp"
-
 namespace f9ay {
 class PNG {
 #pragma pack(push, 1)
@@ -35,12 +35,9 @@ class PNG {
         u_int8_t compressionMethod;
         u_int8_t filterMethod;
         u_int8_t interlaceMethod;
-
-        std::byte* getByte() {}
     };
-    struct ChunkHeader {
-        uint32_t length;
-        char type[4];
+    struct IDATChunk {
+        char chunkType[4] = {'I', 'D', 'A', 'T'};
     };
     struct IENDChunk {
         char chunkType[4] = {'I', 'E', 'N', 'D'};
@@ -48,7 +45,8 @@ class PNG {
 #pragma pack(pop)
     static_assert(sizeof(PNGSignature) == 8);
     static_assert(sizeof(IDHRChunk) == 17);
-    static_assert(sizeof(ChunkHeader) == 8);
+    static_assert(sizeof(IDATChunk) == 4);
+    static_assert(sizeof(IENDChunk) == 4);
 
 public:
     template <MATRIX_CONCEPT Matrix_Type>
@@ -56,8 +54,22 @@ public:
         Matrix_Type& matrix, FilterType filterType) {
         using ElementType = std::decay_t<decltype(matrix[0][0])>;
         // write signature to buffer
-        size_t size = sizeof(PNGSignature) + sizeof(IDHRChunk) +
-                      sizeof(u_int32_t) + sizeof(u_int32_t);
+        // compress first to get size and data
+        auto filteredMatrix = deflate::filter(matrix, filterType);
+        auto [compressedData, compressedSize] =
+            deflate::Deflate<deflate::BlockType::Fixed>::compress(
+                filteredMatrix);
+        size_t size = sizeof(PNGSignature) +  // PNG簽名
+                      4 +                     // IHDR長度欄位
+                      sizeof(IDHRChunk) +     // IHDR區塊
+                      4 +                     // IHDR的CRC
+                      4 +                     // IDAT長度欄位
+                      sizeof(IDATChunk) +     // IDAT區塊頭
+                      compressedSize +        // 壓縮後的數據
+                      4 +                     // IDAT的CRC
+                      4 +                     // IEND長度欄位
+                      sizeof(IENDChunk) +     // IEND區塊
+                      4;                      // IEND的CRC
         std::unique_ptr<std::byte[]> data(new std::byte[size]);
         auto pngSignature =
             PNGSignature{{std::byte{0x89}, std::byte{0x50}, std::byte{0x4e},
@@ -75,13 +87,13 @@ public:
         auto ihdrChunk = IDHRChunk{};
         ihdrChunk.width = checkAndSwapToBigEndian(matrix.col());
         ihdrChunk.height = checkAndSwapToBigEndian(matrix.row());
-        ihdrChunk.bitDepth = checkAndSwapToBigEndian(8);
+        ihdrChunk.bitDepth = checkAndSwapToBigEndian((u_int8_t)8);
         if constexpr (std::is_same_v<ElementType, colors::BGR> ||
                       std::is_same_v<ElementType, colors::RGB>) {
-            ihdrChunk.colorType = checkAndSwapToBigEndian(2);  // RGB
+            ihdrChunk.colorType = checkAndSwapToBigEndian((u_int8_t)2);  // RGB
         } else if constexpr (std::is_same_v<ElementType, colors::BGRA> ||
                              std::is_same_v<ElementType, colors::RGBA>) {
-            ihdrChunk.colorType = checkAndSwapToBigEndian(6);  // RGBA
+            ihdrChunk.colorType = checkAndSwapToBigEndian((u_int8_t)6);  // RGBA
         } else {
             static_assert("Unsupported color type");
         }
@@ -98,6 +110,49 @@ public:
 
         // write crc to buffer
         offset = _writeToBuffer(offset, sizeof(u_int32_t), ihdrChunkCRC);
+
+        // write IDAT chunk
+        auto idatChunk = IDATChunk{};
+        auto idatChunkLength = checkAndSwapToBigEndian(compressedSize);
+        offset = _writeToBuffer(offset, sizeof(u_int32_t), idatChunkLength);
+        // create idat chunks with data
+        offset =
+            std::copy(reinterpret_cast<std::byte*>(&idatChunk),
+                      reinterpret_cast<std::byte*>(&idatChunk + 1), offset);
+        std::unique_ptr<std::byte[]> idatData(
+            new std::byte[compressedSize + sizeof(IDATChunk)]);
+        auto tempOffset = std::copy(
+            reinterpret_cast<std::byte*>(&idatChunk),
+            reinterpret_cast<std::byte*>(&idatChunk + 1), idatData.get());
+
+        std::copy(compressedData.get(), compressedData.get() + compressedSize,
+                  tempOffset);
+
+        // write idat chunk to buffer
+        offset = std::copy(compressedData.get(),
+                           compressedData.get() + compressedSize, offset);
+
+        // calculate crc
+        auto idatChunkCRC =
+            _calculateCRC(idatData.get(), compressedSize + sizeof(IDATChunk));
+
+        // write crc to buffer
+        offset = _writeToBuffer(offset, sizeof(u_int32_t), idatChunkCRC);
+
+        // write IEND chunk length
+        u_int32_t iendDataLength = 0;
+        offset = _writeToBuffer(offset, sizeof(u_int32_t), iendDataLength);
+
+        // write IEND chunk
+        auto iendChunk = IENDChunk{};
+        offset =
+            std::copy(reinterpret_cast<std::byte*>(&iendChunk),
+                      reinterpret_cast<std::byte*>(&iendChunk + 1), offset);
+        // calculate CRC
+        auto iendChunkCRC = _calculateCRC(
+            reinterpret_cast<std::byte*>(&iendChunk), sizeof(IENDChunk));
+        // write crc to buffer
+        offset = _writeToBuffer(offset, sizeof(u_int32_t), iendChunkCRC);
 
         return {std::move(data), size};
     }

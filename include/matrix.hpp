@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <format>
 #include <iostream>
+#include <span>
 
 namespace f9ay {
 template <typename T>
@@ -195,6 +196,9 @@ public:
             }
         }
         return result;
+    }
+    std::span<T> flattenToSpan() {
+        return std::span<T>(data, rows * cols);
     }
     /*
         {{1, 2, 3},

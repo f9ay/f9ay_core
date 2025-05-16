@@ -16,8 +16,8 @@ struct BGR {
     }
     BGR operator+(int val) const {
         return {std::byte(static_cast<char>(b) + val),
-                   std::byte(static_cast<char>(g) + val),
-                   std::byte(static_cast<char>(r) + val)};
+                std::byte(static_cast<char>(g) + val),
+                std::byte(static_cast<char>(r) + val)};
     }
     BGR operator-(const BGR& other) const {
         return BGR{
@@ -75,6 +75,16 @@ struct BGR {
         g = std::byte(static_cast<char>(g) * val);
         r = std::byte(static_cast<char>(r) * val);
         return *this;
+    }
+    bool operator==(const BGR& other) const {
+        return b == other.b && g == other.g && r == other.r;
+    }
+    bool operator!=(const BGR& other) const {
+        return !(*this == other);
+    }
+
+    bool operator<(const BGR& other) const {
+        return std::tie(b, g, r) < std::tie(other.b, other.g, other.r);
     }
 };
 
@@ -142,6 +152,15 @@ struct RGB {
         g = std::byte(static_cast<char>(g) * val);
         b = std::byte(static_cast<char>(b) * val);
         return *this;
+    }
+    bool operator==(const RGB& other) const {
+        return r == other.r && g == other.g && b == other.b;
+    }
+    bool operator!=(const RGB& other) const {
+        return !(*this == other);
+    }
+    bool operator<(const RGB& other) const {
+        return std::tie(r, g, b) < std::tie(other.r, other.g, other.b);
     }
 };
 
@@ -227,6 +246,15 @@ struct BGRA {
         a = std::byte(static_cast<char>(a) * val);
         return *this;
     }
+    bool operator==(const BGRA& other) const {
+        return b == other.b && g == other.g && r == other.r && a == other.a;
+    }
+    bool operator!=(const BGRA& other) const {
+        return !(*this == other);
+    }
+    bool operator<(const BGRA& other) const {
+        return std::tie(b, g, r, a) < std::tie(other.b, other.g, other.r, other.a);
+    }
 };
 
 struct RGBA {
@@ -311,6 +339,15 @@ struct RGBA {
         a = std::byte(static_cast<char>(a) * val);
         return *this;
     }
+    bool operator==(const RGBA& other) const {
+        return r == other.r && g == other.g && b == other.b && a == other.a;
+    }
+    bool operator!=(const RGBA& other) const {
+        return !(*this == other);
+    }
+    bool operator<(const RGBA& other) const {
+        return std::tie(r, g, b, a) < std::tie(other.r, other.g, other.b, other.a);
+    }
 };
 inline int abs(const BGR& color) {
     return std::abs(std::to_integer<int>(color.b)) +
@@ -374,3 +411,43 @@ struct std::formatter<f9ay::colors::RGBA, Char_T>
             std::to_integer<int>(color.a));
     }
 };
+
+namespace std {
+template <>
+struct hash<f9ay::colors::BGR> {
+    std::size_t operator()(const f9ay::colors::BGR& color) const {
+        return std::hash<std::byte>()(color.b) ^
+               std::hash<std::byte>()(color.g) ^
+               std::hash<std::byte>()(color.r);
+    }
+};
+
+template <>
+struct hash<f9ay::colors::RGB> {
+    std::size_t operator()(const f9ay::colors::RGB& color) const {
+        return std::hash<std::byte>()(color.r) ^
+               std::hash<std::byte>()(color.g) ^
+               std::hash<std::byte>()(color.b);
+    }
+};
+
+template <>
+struct hash<f9ay::colors::BGRA> {
+    std::size_t operator()(const f9ay::colors::BGRA& color) const {
+        return std::hash<std::byte>()(color.b) ^
+               std::hash<std::byte>()(color.g) ^
+               std::hash<std::byte>()(color.r) ^
+               std::hash<std::byte>()(color.a);
+    }
+};
+
+template <>
+struct hash<f9ay::colors::RGBA> {
+    std::size_t operator()(const f9ay::colors::RGBA& color) const {
+        return std::hash<std::byte>()(color.r) ^
+               std::hash<std::byte>()(color.g) ^
+               std::hash<std::byte>()(color.b) ^
+               std::hash<std::byte>()(color.a);
+    }
+};
+}  // namespace std

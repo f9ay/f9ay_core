@@ -10,28 +10,6 @@
 
 #include "container_concept.hpp"
 #include "matrix_concept.hpp"
-// class HuffmanBitStruct {
-// public:
-//     HuffmanBitStruct(const std::vector<std::byte>& bits) {
-//         std::unique_ptr<std::byte[]> data(new std::byte[bits.size() / 8]);
-//         _bitBuffer = bits.size() % 8;
-
-//         auto dataPtr = data.get();
-//         for (int i = 0; i < bits.size(); i++) {
-//             if (bits[i] == std::byte{1}) {
-//             }
-//         }
-//     }
-
-//     HuffmanBitStruct(const HuffmanBitStruct& other) = default;
-//     HuffmanBitStruct(HuffmanBitStruct&& other) = default;
-//     HuffmanBitStruct& operator=(const HuffmanBitStruct& other) = default;
-//     HuffmanBitStruct& operator=(HuffmanBitStruct&& other) = default;
-
-// private:
-//     std::unique_ptr<std::byte[]> _data;
-//     int _bitBuffer;
-// };
 
 namespace f9ay {
 template <typename T>
@@ -128,15 +106,15 @@ private:
         using NodePtr =
             std::unique_ptr<HuffmanNode<typename Container::value_type>>;
         bool operator()(const NodePtr& lhs, const NodePtr& rhs) const {
-            if (lhs->frequency == rhs->frequency) {
-                if (lhs->data.has_value() && rhs->data.has_value()) {
-                    return lhs->data.value() > rhs->data.value();
-                } else if (lhs->data.has_value()) {
-                    return true;
-                } else if (rhs->data.has_value()) {
-                    return false;
-                }
-            }
+            // if (lhs->frequency == rhs->frequency) {
+            //     if (lhs->data.has_value() && rhs->data.has_value()) {
+            //         return lhs->data.value() > rhs->data.value();
+            //     } else if (lhs->data.has_value()) {
+            //         return true;
+            //     } else if (rhs->data.has_value()) {
+            //         return false;
+            //     }
+            // }
             return lhs->frequency > rhs->frequency;
         }
     };

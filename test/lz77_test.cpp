@@ -47,10 +47,10 @@ TEST(LS77Test, EncodeDecode) {
 
             for (const auto& [dictSize, bufferSize] : params) {
                 // Encode the string
-                auto encoded = lz77Encode(original);
+                auto encoded = LZ77::lz77EncodeFast(original);
 
                 // Decode the encoded data
-                auto decoded = lz77decode<std::string>(encoded);
+                auto decoded = LZ77::lz77decode<std::string>(encoded);
 
                 // Verify the decoded string matches the original
                 ASSERT_EQ(original, decoded)
@@ -78,10 +78,10 @@ TEST(LS77Test, SpecificPatterns) {
 
     for (const auto& pattern : patterns) {
         // Encode the string
-        auto encoded = lz77Encode(pattern);
+        auto encoded = LZ77::lz77EncodeFast(pattern);
 
         // Decode the encoded data
-        auto decoded = lz77decode<std::string>(encoded);
+        auto decoded = LZ77::lz77decode<std::string>(encoded);
 
         // Verify the decoded string matches the original
         ASSERT_EQ(pattern, decoded) << "Failed pattern: " << pattern;

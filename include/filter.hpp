@@ -6,8 +6,8 @@
 enum class FilterType { None, Sub, Up, Average, Paeth };
 
 namespace f9ay::deflate {
-template <FilterType filterType, MATRIX_CONCEPT Matrix>
-inline constexpr Matrix filter(const Matrix& matrix) {
+template <MATRIX_CONCEPT Matrix>
+inline constexpr Matrix filter(const Matrix& matrix, FilterType filterType) {
     auto filteredMatrix = matrix;
 
     switch (filterType) {

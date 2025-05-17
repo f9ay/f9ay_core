@@ -39,15 +39,15 @@ endif()
 
 
 enable_testing()
-add_executable(ls77_test test/ls77_test.cpp)
-target_include_directories(ls77_test PRIVATE ${GTEST_INCLUDE_DIRS} include/lz77_compress.hpp)
-target_link_libraries(ls77_test PRIVATE gtest_main) 
+add_executable(lz77_test test/lz77_test.cpp)
+target_include_directories(lz77_test PRIVATE ${GTEST_INCLUDE_DIRS} include/lz77_compress.hpp)
+target_link_libraries(lz77_test PRIVATE gtest_main) 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-    target_compile_options(ls77_test PRIVATE /FAcs /MTd)
-    target_link_libraries(ls77_test PRIVATE user32 gdi32)
+    target_compile_options(lz77_test PRIVATE /FAcs /MTd)
+    target_link_libraries(lz77_test PRIVATE user32 gdi32)
 endif()
 
-add_test(NAME ls77_test COMMAND ls77_test)  
+add_test(NAME lz77_test COMMAND lz77_test)  
 
 
 # add_executable(huffman_test test/huffman_test.cpp)

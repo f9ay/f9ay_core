@@ -7,8 +7,8 @@ concept ContainerConcept = requires(T t, const T ct) {
     typename T::value_type;
     { t.begin() } -> std::same_as<typename T::iterator>;
     { t.end() } -> std::same_as<typename T::iterator>;
-    { ct.begin() } -> std::same_as<typename T::const_iterator>;
-    { ct.end() } -> std::same_as<typename T::const_iterator>;
+    // { ct.begin() } -> std::same_as<typename T::const_iterator>;
+    // { ct.end() } -> std::same_as<typename T::const_iterator>;
     { t[0] };
     { ct[0] };
 };

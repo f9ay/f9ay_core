@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <format>
 #include <iostream>
+#include <span>
 
 namespace f9ay {
 template <typename T>
@@ -196,6 +197,9 @@ public:
         }
         return result;
     }
+    std::span<T> flattenToSpan() {
+        return std::span<T>(data, rows * cols);
+    }
     /*
         {{1, 2, 3},
          {4, 5, 6},
@@ -212,6 +216,12 @@ public:
             std::copy(row.begin(), row.end(), data + (i * cols));
             i++;
         }
+    }
+
+    Matrix(const std::span<T> &span, const int _rows, const int _cols)
+        : rows(_rows), cols(_cols) {
+        data = new T[span.size()];
+        std::copy(span.begin(), span.end(), data);
     }
     ~Matrix() {
         delete[] data;

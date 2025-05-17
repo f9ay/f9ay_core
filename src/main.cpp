@@ -8,12 +8,13 @@
 #include <ranges>
 #include <source_location>
 
-#include "lz77_compress.hpp"
 #include "bmp.hpp"
 #include "dct.hpp"
 #include "huffman_coding.hpp"
+#include "lz77_compress.hpp"
 #include "matrix.hpp"
 #include "matrix_view.hpp"
+#include "png.hpp"
 
 #ifdef WIN32
 #include "platform/windows_show.hpp"
@@ -129,12 +130,33 @@ int main(int argc, char** argv) {
     std::unique_ptr<std::byte[]> buffer;
     size_t sz;
     std::visit(
-        [&buffer, &sz](auto&& arg) { std::tie(buffer, sz) = Bmp::write(arg); },
+        [&buffer, &sz, &path](auto&& arg) {
+            // std::tie(buffer, sz) = Bmp::write(arg);
+
+            Matrix<colors::RGB> mtx(1, 1);
+            mtx[0, 0] =
+                colors::RGB{std::byte{0xFF}, std::byte{0x00}, std::byte{0x00}};
+
+            std::ofstream out(path.parent_path() / "test.png",
+                              std::ios::binary);
+
+            auto [buffer, size] = PNG::exportToByte(arg, FilterType::Up);
+            out.write(reinterpret_cast<const char*>(buffer.get()), size);
+        },
         result);
+
+    Matrix<colors::BGR> mtx(3, 3);
 
     std::ofstream out(path.parent_path() / "fire_converted.bmp",
                       std::ios::binary);
-    out.write(reinterpret_cast<const char*>(buffer.get()), sz);
+
+    std::string test = "aacaacabcabaaac";
+
+    auto vec = LZ77::lz77Encode(test);
+    for (auto [offset, length, value] : vec) {
+        std::cout << "Offset: " << offset << ", Length: " << length
+                  << ", Value: " << (value.has_value() ? *value : ' ') << "\n";
+    }
 
 #ifdef WIN32
     f9ay::test::windows::Windows windows{};

@@ -28,13 +28,13 @@ class PNG {
 
     struct IDHRChunk {
         char chunkType[4] = {'I', 'H', 'D', 'R'};
-        u_int32_t width;
-        u_int32_t height;
-        u_int8_t bitDepth;
-        u_int8_t colorType;
-        u_int8_t compressionMethod;
-        u_int8_t filterMethod;
-        u_int8_t interlaceMethod;
+        uint32_t width;
+        uint32_t height;
+        uint8_t bitDepth;
+        uint8_t colorType;
+        uint8_t compressionMethod;
+        uint8_t filterMethod;
+        uint8_t interlaceMethod;
     };
     struct IDATChunk {
         char chunkType[4] = {'I', 'D', 'A', 'T'};
@@ -58,12 +58,12 @@ public:
         auto rawData = matrix.raw();
 
         auto expandedData =
-            reinterpret_cast<u_int8_t*>(rawData);  // expand to byte
+            reinterpret_cast<uint8_t*>(rawData);  // expand to byte
 
-        auto span = std::span<u_int8_t>(
+        auto span = std::span<uint8_t>(
             expandedData, matrix.row() * matrix.col() * sizeof(ElementType));
 
-        Matrix<u_int8_t> expandedMatrix{
+        Matrix<uint8_t> expandedMatrix{
             span, matrix.row(),
             matrix.col() * static_cast<int>(sizeof(ElementType))};
         auto [compressedData, compressedSize] =
@@ -89,7 +89,7 @@ public:
                                 reinterpret_cast<std::byte*>(&pngSignature + 1),
                                 data.get());
 
-        u_int32_t ihdrDataLength =
+        uint32_t ihdrDataLength =
             sizeof(IDHRChunk) - sizeof(decltype(IDHRChunk::chunkType));
         offset = _writeToBuffer(offset, ihdrDataLength, ihdrDataLength);
 
@@ -118,17 +118,16 @@ public:
             reinterpret_cast<std::byte*>(&ihdrChunk), sizeof(IDHRChunk));
 
         // write crc to buffer
-        offset = _writeToBuffer(offset, sizeof(u_int32_t), ihdrChunkCRC);
+        offset = _writeToBuffer(offset, sizeof(uint32_t), ihdrChunkCRC);
 
         // write IDAT chunk
         auto idatChunk = IDATChunk{};
-        auto idatChunkLength = static_cast<u_int32_t>(compressedSize);
-        offset = _writeToBuffer(offset, sizeof(u_int32_t), idatChunkLength);
+        auto idatChunkLength = static_cast<uint32_t>(compressedSize);
+        offset = _writeToBuffer(offset, sizeof(uint32_t), idatChunkLength);
         // create idat chunks with data
         offset =
             std::copy(reinterpret_cast<std::byte*>(&idatChunk),
                       reinterpret_cast<std::byte*>(&idatChunk + 1), offset);
-
 
         // create temp buffer for idat chunk
         // inorder to calculate crc
@@ -150,11 +149,11 @@ public:
             _calculateCRC(idatData.get(), compressedSize + sizeof(IDATChunk));
 
         // write crc to buffer
-        offset = _writeToBuffer(offset, sizeof(u_int32_t), idatChunkCRC);
+        offset = _writeToBuffer(offset, sizeof(uint32_t), idatChunkCRC);
 
         // write IEND chunk length
-        u_int32_t iendDataLength = 0;
-        offset = _writeToBuffer(offset, sizeof(u_int32_t), iendDataLength);
+        uint32_t iendDataLength = 0;
+        offset = _writeToBuffer(offset, sizeof(uint32_t), iendDataLength);
 
         // write IEND chunk
         auto iendChunk = IENDChunk{};
@@ -165,16 +164,16 @@ public:
         auto iendChunkCRC = _calculateCRC(
             reinterpret_cast<std::byte*>(&iendChunk), sizeof(IENDChunk));
         // write crc to buffer
-        offset = _writeToBuffer(offset, sizeof(u_int32_t), iendChunkCRC);
+        offset = _writeToBuffer(offset, sizeof(uint32_t), iendChunkCRC);
 
         return {std::move(data), size};
     }
 
 private:
-    static u_int32_t _calculateCRC(const std::byte* data, size_t length) {
-        u_int32_t crc = 0xffffffff;
+    static uint32_t _calculateCRC(const std::byte* data, size_t length) {
+        uint32_t crc = 0xffffffff;
         for (size_t i = 0; i < length; i++) {
-            crc ^= static_cast<u_int32_t>(data[i]);
+            crc ^= static_cast<uint32_t>(data[i]);
             for (int j = 0; j < 8; j++) {
                 if (crc & 1) {
                     crc = (crc >> 1) ^ 0xedb88320;

@@ -1,4 +1,5 @@
 #pragma once
+
 #include <bit>
 #include <cstddef>
 #include <map>
@@ -35,37 +36,37 @@ public:
 
 private:
     struct FixedHuffmanCode {
-        u_int16_t bitCode;
-        u_int16_t length;
+        uint16_t bitCode;
+        uint16_t length;
     };
 
     struct FixedLengthCode {
-        u_int16_t code;
-        u_int8_t extraBit;
-        u_int16_t extraBitLength;
+        uint16_t code;
+        uint8_t extraBit;
+        uint16_t extraBitLength;
     };
 
     struct FixedDistanceCode {
-        u_int8_t code;
-        u_int16_t extraBit;
-        u_int8_t extraBitLength;
+        uint8_t code;
+        uint16_t extraBit;
+        uint8_t extraBitLength;
     };
 
     static constexpr auto _buildFixedHuffmanTable() {
         std::array<FixedHuffmanCode, 288> fixedHuffmanCodesTable{};
 
-        for (size_t i = 0; i < 144; i++) {
-            constexpr u_int16_t baseCode = 0b00110000;
-            u_int16_t code = baseCode + i;
+        for (int i = 0; i < 144; i++) {
+            constexpr uint16_t baseCode = 0b00110000;
+            uint16_t code = baseCode + i;
 
             static_assert(baseCode + 143 == 0b10111111);
 
             fixedHuffmanCodesTable[i] = {code, 8};
         }
 
-        for (size_t i = 144; i < 256; i++) {
-            constexpr u_int16_t baseCode = 0b110010000;
-            u_int16_t code = baseCode + (i - 144);
+        for (int i = 144; i < 256; i++) {
+            constexpr uint16_t baseCode = 0b110010000;
+            uint16_t code = baseCode + (i - 144);
 
             static_assert(baseCode + (255 - 144) == 0b111111111);
 
@@ -74,17 +75,17 @@ private:
 
         fixedHuffmanCodesTable[256] = {0, 7};  // end of block
 
-        for (size_t i = 257; i < 280; i++) {
-            constexpr u_int16_t baseCode = 0b0000000;
-            u_int16_t code = baseCode + (i - 256);
+        for (int i = 257; i < 280; i++) {
+            constexpr uint16_t baseCode = 0b0000000;
+            uint16_t code = baseCode + (i - 256);
             static_assert(baseCode + (279 - 256) == 0b0010111);
 
             fixedHuffmanCodesTable[i] = {code, 7};
         }
 
-        for (size_t i = 280; i < 288; i++) {
-            constexpr u_int16_t baseCode = 0b11000000;
-            u_int16_t code = baseCode + (i - 280);
+        for (int i = 280; i < 288; i++) {
+            constexpr uint16_t baseCode = 0b11000000;
+            uint16_t code = baseCode + (i - 280);
             static_assert(baseCode + (287 - 280) == 0b11000111);
 
             fixedHuffmanCodesTable[i] = {code, 8};
@@ -96,171 +97,171 @@ private:
     static constexpr auto _buildFixedLengthTable() {
         std::array<FixedLengthCode, 259> fixedLengthTable{};
 
-        for (size_t i = 3; i < 11; i++) {
-            constexpr u_int16_t baseCode = 257;
-            const u_int16_t code = baseCode + (i - 3);
+        for (int i = 3; i < 11; i++) {
+            constexpr uint16_t baseCode = 257;
+            const uint16_t code = baseCode + (i - 3);
 
             static_assert(baseCode + (10 - 3) == 264);
 
             fixedLengthTable[i] = {code, 0, 0};
         }
 
-        for (size_t i = 11; i < 13; i++) {
-            constexpr u_int16_t baseCode = 265;
+        for (int i = 11; i < 13; i++) {
+            constexpr uint16_t baseCode = 265;
             // no need to add on baseCode
-            u_int8_t extraBit = (i - 11);
+            uint8_t extraBit = (i - 11);
 
             fixedLengthTable[i] = {baseCode, extraBit, 1};
         }
 
-        for (size_t i = 13; i < 15; i++) {
-            constexpr u_int16_t baseCode = 266;
+        for (int i = 13; i < 15; i++) {
+            constexpr uint16_t baseCode = 266;
             // no need to add on baseCode
-            u_int8_t extraBit = (i - 13);
+            uint8_t extraBit = (i - 13);
 
             fixedLengthTable[i] = {baseCode, extraBit, 1};
         }
 
-        for (size_t i = 15; i < 17; i++) {
-            constexpr u_int16_t baseCode = 267;
+        for (int i = 15; i < 17; i++) {
+            constexpr uint16_t baseCode = 267;
             // no need to add on baseCode
-            u_int8_t extraBit = (i - 15);
+            uint8_t extraBit = (i - 15);
 
             fixedLengthTable[i] = {baseCode, extraBit, 1};
         }
 
-        for (size_t i = 17; i < 19; i++) {
-            constexpr u_int16_t baseCode = 268;
+        for (int i = 17; i < 19; i++) {
+            constexpr uint16_t baseCode = 268;
             // no need to add on baseCode
-            u_int8_t extraBit = (i - 17);
+            uint8_t extraBit = (i - 17);
 
             fixedLengthTable[i] = {baseCode, extraBit, 1};
         }
 
-        for (size_t i = 19; i < 23; i++) {
-            constexpr u_int16_t baseCode = 269;
+        for (int i = 19; i < 23; i++) {
+            constexpr uint16_t baseCode = 269;
             // no need to add on baseCode
-            u_int8_t extraBit = (i - 19);
+            uint8_t extraBit = (i - 19);
 
             fixedLengthTable[i] = {baseCode, extraBit, 2};
         }
 
-        for (size_t i = 23; i < 27; i++) {
-            constexpr u_int16_t baseCode = 270;
+        for (int i = 23; i < 27; i++) {
+            constexpr uint16_t baseCode = 270;
             // no need to add on baseCode
-            u_int8_t extraBit = (i - 23);
+            uint8_t extraBit = (i - 23);
 
             fixedLengthTable[i] = {baseCode, extraBit, 2};
         }
 
-        for (size_t i = 27; i < 31; i++) {
-            constexpr u_int16_t baseCode = 271;
+        for (int i = 27; i < 31; i++) {
+            constexpr uint16_t baseCode = 271;
             // no need to add on baseCode
-            u_int8_t extraBit = (i - 27);
+            uint8_t extraBit = (i - 27);
 
             fixedLengthTable[i] = {baseCode, extraBit, 2};
         }
 
-        for (size_t i = 31; i < 35; i++) {
-            constexpr u_int16_t baseCode = 272;
+        for (int i = 31; i < 35; i++) {
+            constexpr uint16_t baseCode = 272;
             // no need to add on baseCode
-            u_int8_t extraBit = (i - 31);
+            uint8_t extraBit = (i - 31);
 
             fixedLengthTable[i] = {baseCode, extraBit, 2};
         }
 
-        for (size_t i = 35; i < 43; i++) {
-            constexpr u_int16_t baseCode = 273;
+        for (int i = 35; i < 43; i++) {
+            constexpr uint16_t baseCode = 273;
             // no need to add on baseCode
-            u_int8_t extraBit = (i - 35);
+            uint8_t extraBit = (i - 35);
 
             fixedLengthTable[i] = {baseCode, extraBit, 3};
         }
 
-        for (size_t i = 43; i < 51; i++) {
-            constexpr u_int16_t baseCode = 274;
+        for (int i = 43; i < 51; i++) {
+            constexpr uint16_t baseCode = 274;
             // no need to add on baseCode
-            u_int8_t extraBit = (i - 43);
+            uint8_t extraBit = (i - 43);
 
             fixedLengthTable[i] = {baseCode, extraBit, 3};
         }
 
-        for (size_t i = 51; i < 59; i++) {
-            constexpr u_int16_t baseCode = 275;
+        for (int i = 51; i < 59; i++) {
+            constexpr uint16_t baseCode = 275;
             // no need to add on baseCode
-            u_int8_t extraBit = (i - 51);
+            uint8_t extraBit = (i - 51);
 
             fixedLengthTable[i] = {baseCode, extraBit, 3};
         }
 
-        for (size_t i = 59; i < 67; i++) {
-            constexpr u_int16_t baseCode = 276;
+        for (int i = 59; i < 67; i++) {
+            constexpr uint16_t baseCode = 276;
             // no need to add on baseCode
-            u_int8_t extraBit = (i - 59);
+            uint8_t extraBit = (i - 59);
 
             fixedLengthTable[i] = {baseCode, extraBit, 3};
         }
 
-        for (size_t i = 67; i < 83; i++) {
-            constexpr u_int16_t baseCode = 277;
+        for (int i = 67; i < 83; i++) {
+            constexpr uint16_t baseCode = 277;
             // no need to add on baseCode
-            u_int8_t extraBit = (i - 67);
+            uint8_t extraBit = (i - 67);
 
             fixedLengthTable[i] = {baseCode, extraBit, 4};
         }
 
-        for (size_t i = 83; i < 99; i++) {
-            constexpr u_int16_t baseCode = 278;
+        for (int i = 83; i < 99; i++) {
+            constexpr uint16_t baseCode = 278;
             // no need to add on baseCode
-            u_int8_t extraBit = (i - 83);
+            uint8_t extraBit = (i - 83);
 
             fixedLengthTable[i] = {baseCode, extraBit, 4};
         }
 
-        for (size_t i = 99; i < 115; i++) {
-            constexpr u_int16_t baseCode = 279;
+        for (int i = 99; i < 115; i++) {
+            constexpr uint16_t baseCode = 279;
             // no need to add on baseCode
-            u_int8_t extraBit = (i - 99);
+            uint8_t extraBit = (i - 99);
 
             fixedLengthTable[i] = {baseCode, extraBit, 4};
         }
 
-        for (size_t i = 115; i < 131; i++) {
-            constexpr u_int16_t baseCode = 280;
+        for (int i = 115; i < 131; i++) {
+            constexpr uint16_t baseCode = 280;
             // no need to add on baseCode
-            u_int8_t extraBit = (i - 115);
+            uint8_t extraBit = (i - 115);
 
             fixedLengthTable[i] = {baseCode, extraBit, 4};
         }
 
-        for (size_t i = 131; i < 163; i++) {
-            constexpr u_int16_t baseCode = 281;
+        for (int i = 131; i < 163; i++) {
+            constexpr uint16_t baseCode = 281;
             // no need to add on baseCode
-            u_int8_t extraBit = (i - 131);
+            uint8_t extraBit = (i - 131);
 
             fixedLengthTable[i] = {baseCode, extraBit, 5};
         }
 
-        for (size_t i = 163; i < 195; i++) {
-            constexpr u_int16_t baseCode = 282;
+        for (int i = 163; i < 195; i++) {
+            constexpr uint16_t baseCode = 282;
             // no need to add on baseCode
-            u_int8_t extraBit = (i - 163);
+            uint8_t extraBit = (i - 163);
 
             fixedLengthTable[i] = {baseCode, extraBit, 5};
         }
 
-        for (size_t i = 195; i < 227; i++) {
-            constexpr u_int16_t baseCode = 283;
+        for (int i = 195; i < 227; i++) {
+            constexpr uint16_t baseCode = 283;
             // no need to add on baseCode
-            u_int8_t extraBit = (i - 195);
+            uint8_t extraBit = (i - 195);
 
             fixedLengthTable[i] = {baseCode, extraBit, 5};
         }
 
-        for (size_t i = 227; i < 258; i++) {
-            constexpr u_int16_t baseCode = 284;
+        for (int i = 227; i < 258; i++) {
+            constexpr uint16_t baseCode = 284;
             // no need to add on baseCode
-            u_int8_t extraBit = (i - 227);
+            uint8_t extraBit = (i - 227);
 
             fixedLengthTable[i] = {baseCode, extraBit, 5};
         }
@@ -275,7 +276,7 @@ private:
 
         // 距離1-4直接對應編碼0-3，無額外位元
         for (int i = 1; i <= 4; i++) {
-            fixedDistanceTable[i] = {static_cast<u_int8_t>(i - 1), 0, 0};
+            fixedDistanceTable[i] = {static_cast<uint8_t>(i - 1), 0, 0};
         }
 
         // 編碼4: 距離5-6 (需要1個額外位元)
@@ -288,130 +289,125 @@ private:
 
         // 編碼6: 距離9-12 (需要2個額外位元)
         for (int i = 9; i <= 12; i++) {
-            fixedDistanceTable[i] = {6, static_cast<u_int16_t>(i - 9), 2};
+            fixedDistanceTable[i] = {6, static_cast<uint16_t>(i - 9), 2};
         }
 
         // 編碼7: 距離13-16 (需要2個額外位元)
         for (int i = 13; i <= 16; i++) {
-            fixedDistanceTable[i] = {7, static_cast<u_int16_t>(i - 13), 2};
+            fixedDistanceTable[i] = {7, static_cast<uint16_t>(i - 13), 2};
         }
 
         // 編碼8: 距離17-24 (需要3個額外位元)
         for (int i = 17; i <= 24; i++) {
-            fixedDistanceTable[i] = {8, static_cast<u_int16_t>(i - 17), 3};
+            fixedDistanceTable[i] = {8, static_cast<uint16_t>(i - 17), 3};
         }
 
         // 編碼9: 距離25-32 (需要3個額外位元)
         for (int i = 25; i <= 32; i++) {
-            fixedDistanceTable[i] = {9, static_cast<u_int16_t>(i - 25), 3};
+            fixedDistanceTable[i] = {9, static_cast<uint16_t>(i - 25), 3};
         }
 
         // 編碼10: 距離33-48 (需要4個額外位元)
         for (int i = 33; i <= 48; i++) {
-            fixedDistanceTable[i] = {10, static_cast<u_int16_t>(i - 33), 4};
+            fixedDistanceTable[i] = {10, static_cast<uint16_t>(i - 33), 4};
         }
 
         // 編碼11: 距離49-64 (需要4個額外位元)
         for (int i = 49; i <= 64; i++) {
-            fixedDistanceTable[i] = {11, static_cast<u_int16_t>(i - 49), 4};
+            fixedDistanceTable[i] = {11, static_cast<uint16_t>(i - 49), 4};
         }
 
         // 編碼12: 距離65-96 (需要5個額外位元)
         for (int i = 65; i <= 96; i++) {
-            fixedDistanceTable[i] = {12, static_cast<u_int16_t>(i - 65), 5};
+            fixedDistanceTable[i] = {12, static_cast<uint16_t>(i - 65), 5};
         }
 
         // 編碼13: 距離97-128 (需要5個額外位元)
         for (int i = 97; i <= 128; i++) {
-            fixedDistanceTable[i] = {13, static_cast<u_int16_t>(i - 97), 5};
+            fixedDistanceTable[i] = {13, static_cast<uint16_t>(i - 97), 5};
         }
 
         // 編碼14-29: 依此類推...
         // 編碼14: 距離129-192
         for (int i = 129; i <= 192; i++) {
-            fixedDistanceTable[i] = {14, static_cast<u_int16_t>(i - 129), 6};
+            fixedDistanceTable[i] = {14, static_cast<uint16_t>(i - 129), 6};
         }
 
         // 編碼15: 距離193-256
         for (int i = 193; i <= 256; i++) {
-            fixedDistanceTable[i] = {15, static_cast<u_int16_t>(i - 193), 6};
+            fixedDistanceTable[i] = {15, static_cast<uint16_t>(i - 193), 6};
         }
 
         // 編碼16: 距離257-384
         for (int i = 257; i <= 384; i++) {
-            fixedDistanceTable[i] = {16, static_cast<u_int16_t>(i - 257), 7};
+            fixedDistanceTable[i] = {16, static_cast<uint16_t>(i - 257), 7};
         }
 
         // 編碼17: 距離385-512
         for (int i = 385; i <= 512; i++) {
-            fixedDistanceTable[i] = {17, static_cast<u_int16_t>(i - 385), 7};
+            fixedDistanceTable[i] = {17, static_cast<uint16_t>(i - 385), 7};
         }
 
         // 編碼18: 距離513-768
         for (int i = 513; i <= 768; i++) {
-            fixedDistanceTable[i] = {18, static_cast<u_int16_t>(i - 513), 8};
+            fixedDistanceTable[i] = {18, static_cast<uint16_t>(i - 513), 8};
         }
 
         // 編碼19: 距離769-1024
         for (int i = 769; i <= 1024; i++) {
-            fixedDistanceTable[i] = {19, static_cast<u_int16_t>(i - 769), 8};
+            fixedDistanceTable[i] = {19, static_cast<uint16_t>(i - 769), 8};
         }
 
         // 編碼20: 距離1025-1536
         for (int i = 1025; i <= 1536; i++) {
-            fixedDistanceTable[i] = {20, static_cast<u_int16_t>((i - 1025)), 9};
+            fixedDistanceTable[i] = {20, static_cast<uint16_t>((i - 1025)), 9};
         }
 
         // 編碼21: 距離1537-2048
         for (int i = 1537; i <= 2048; i++) {
-            fixedDistanceTable[i] = {21, static_cast<u_int16_t>((i - 1537)), 9};
+            fixedDistanceTable[i] = {21, static_cast<uint16_t>((i - 1537)), 9};
         }
 
         // 編碼22: 距離2049-3072
         for (int i = 2049; i <= 3072; i++) {
-            fixedDistanceTable[i] = {22, static_cast<u_int16_t>((i - 2049)),
-                                     10};
+            fixedDistanceTable[i] = {22, static_cast<uint16_t>((i - 2049)), 10};
         }
 
         // 編碼23: 距離3073-4096
         for (int i = 3073; i <= 4096; i++) {
-            fixedDistanceTable[i] = {23, static_cast<u_int16_t>((i - 3073)),
-                                     10};
+            fixedDistanceTable[i] = {23, static_cast<uint16_t>((i - 3073)), 10};
         }
 
         // 編碼24: 距離4097-6144
         for (int i = 4097; i <= 6144; i++) {
-            fixedDistanceTable[i] = {24, static_cast<u_int16_t>((i - 4097)),
-                                     11};
+            fixedDistanceTable[i] = {24, static_cast<uint16_t>((i - 4097)), 11};
         }
 
         // 編碼25: 距離6145-8192
         for (int i = 6145; i <= 8192; i++) {
-            fixedDistanceTable[i] = {25, static_cast<u_int16_t>((i - 6145)),
-                                     11};
+            fixedDistanceTable[i] = {25, static_cast<uint16_t>((i - 6145)), 11};
         }
 
         // 編碼26: 距離8193-12288
         for (int i = 8193; i <= 12288; i++) {
-            fixedDistanceTable[i] = {26, static_cast<u_int16_t>((i - 8193)),
-                                     12};
+            fixedDistanceTable[i] = {26, static_cast<uint16_t>((i - 8193)), 12};
         }
 
         // 編碼27: 距離12289-16384
         for (int i = 12289; i <= 16384; i++) {
-            fixedDistanceTable[i] = {27, static_cast<u_int16_t>((i - 12289)),
+            fixedDistanceTable[i] = {27, static_cast<uint16_t>((i - 12289)),
                                      12};
         }
 
         // 編碼28: 距離16385-24576
         for (int i = 16385; i <= 24576; i++) {
-            fixedDistanceTable[i] = {28, static_cast<u_int16_t>((i - 16385)),
+            fixedDistanceTable[i] = {28, static_cast<uint16_t>((i - 16385)),
                                      13};
         }
 
         // 編碼29: 距離24577-32768
         for (int i = 24577; i <= 32768; i++) {
-            fixedDistanceTable[i] = {29, static_cast<u_int16_t>((i - 24577)),
+            fixedDistanceTable[i] = {29, static_cast<uint16_t>((i - 24577)),
                                      13};
         }
 
@@ -456,7 +452,7 @@ private:
         for (auto& [offset, length, value] : vec) {
             if (length == 0 && value.has_value()) {
                 auto [litCode, litLength] =
-                    _fixedHuffmanCodesTable[static_cast<u_int8_t>(
+                    _fixedHuffmanCodesTable[static_cast<uint8_t>(
                         value.value())];
 
                 bitWriter.writeBitsFromMSB(litCode, litLength);
@@ -488,7 +484,7 @@ private:
                 // to be compatible with the lz77 algorithm
                 if (value.has_value()) {
                     auto [litCode, litLength] =
-                        _fixedHuffmanCodesTable[static_cast<u_int8_t>(
+                        _fixedHuffmanCodesTable[static_cast<uint8_t>(
                             value.value())];
 
                     bitWriter.writeBitsFromMSB(litCode, litLength);
@@ -525,11 +521,11 @@ private:
         return {std::move(compressedData), size};
     }
 
-    static u_int32_t _calculateAdler32(const std::byte* data, size_t length) {
-        u_int32_t a = 1, b = 0;
+    static uint32_t _calculateAdler32(const std::byte* data, size_t length) {
+        uint32_t a = 1, b = 0;
 
         for (size_t i = 0; i < length; i++) {
-            a = (a + static_cast<u_int32_t>(data[i])) % 65521;
+            a = (a + static_cast<uint32_t>(data[i])) % 65521;
             b = (b + a) % 65521;
         }
 

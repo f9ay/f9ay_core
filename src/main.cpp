@@ -150,11 +150,6 @@ int main(int argc, char** argv) {
     std::ofstream out(path.parent_path() / "fire_converted.bmp",
                       std::ios::binary);
 
-    // std::ofstream fs(path);
-
-    // auto [buffer, size] = PNG::exportToByte(mtx, FilterType::Paeth);
-    // fs.write(reinterpret_cast<const char*>(buffer.get()), size);
-
     std::string test = "aacaacabcabaaac";
 
     auto vec = LZ77::lz77Encode(test);

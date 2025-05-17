@@ -128,6 +128,10 @@ public:
         offset =
             std::copy(reinterpret_cast<std::byte*>(&idatChunk),
                       reinterpret_cast<std::byte*>(&idatChunk + 1), offset);
+
+
+        // create temp buffer for idat chunk
+        // inorder to calculate crc
         std::unique_ptr<std::byte[]> idatData(
             new std::byte[compressedSize + sizeof(IDATChunk)]);
         auto tempOffset = std::copy(

@@ -453,5 +453,4 @@ struct hash<f9ay::colors::RGBA> {
     }
 };
 
-
 }  // namespace std

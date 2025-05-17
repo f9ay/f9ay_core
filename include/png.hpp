@@ -55,10 +55,20 @@ public:
         using ElementType = std::decay_t<decltype(matrix[0][0])>;
         // write signature to buffer
         // compress first to get size and data
-        auto filteredMatrix = deflate::filter(matrix, filterType);
+        auto rawData = matrix.raw();
+
+        auto expandedData =
+            reinterpret_cast<u_int8_t*>(rawData);  // expand to byte
+
+        auto span = std::span<u_int8_t>(
+            expandedData, matrix.row() * matrix.col() * sizeof(ElementType));
+
+        Matrix<u_int8_t> expandedMatrix{
+            span, matrix.row(),
+            matrix.col() * static_cast<int>(sizeof(ElementType))};
         auto [compressedData, compressedSize] =
             deflate::Deflate<deflate::BlockType::Fixed>::compress(
-                filteredMatrix);
+                expandedMatrix, filterType);
         size_t size = sizeof(PNGSignature) +  // PNG簽名
                       4 +                     // IHDR長度欄位
                       sizeof(IDHRChunk) +     // IHDR區塊
@@ -87,20 +97,19 @@ public:
         auto ihdrChunk = IDHRChunk{};
         ihdrChunk.width = checkAndSwapToBigEndian(matrix.col());
         ihdrChunk.height = checkAndSwapToBigEndian(matrix.row());
-        ihdrChunk.bitDepth = checkAndSwapToBigEndian((u_int8_t)8);
+        ihdrChunk.bitDepth = 8;
         if constexpr (std::is_same_v<ElementType, colors::BGR> ||
                       std::is_same_v<ElementType, colors::RGB>) {
-            ihdrChunk.colorType = checkAndSwapToBigEndian((u_int8_t)2);  // RGB
+            ihdrChunk.colorType = 2;  // RGB
         } else if constexpr (std::is_same_v<ElementType, colors::BGRA> ||
                              std::is_same_v<ElementType, colors::RGBA>) {
-            ihdrChunk.colorType = checkAndSwapToBigEndian((u_int8_t)6);  // RGBA
+            ihdrChunk.colorType = 6;  // RGBA
         } else {
             static_assert("Unsupported color type");
         }
-        ihdrChunk.compressionMethod = checkAndSwapToBigEndian(0);
-        ihdrChunk.filterMethod =
-            checkAndSwapToBigEndian(static_cast<u_int8_t>(filterType));
-        ihdrChunk.interlaceMethod = checkAndSwapToBigEndian(0);
+        ihdrChunk.compressionMethod = 0;
+        ihdrChunk.filterMethod = 0;
+        ihdrChunk.interlaceMethod = 0;
         offset =
             std::copy(reinterpret_cast<std::byte*>(&ihdrChunk),
                       reinterpret_cast<std::byte*>(&ihdrChunk + 1), offset);
@@ -113,7 +122,7 @@ public:
 
         // write IDAT chunk
         auto idatChunk = IDATChunk{};
-        auto idatChunkLength = checkAndSwapToBigEndian(compressedSize);
+        auto idatChunkLength = static_cast<u_int32_t>(compressedSize);
         offset = _writeToBuffer(offset, sizeof(u_int32_t), idatChunkLength);
         // create idat chunks with data
         offset =

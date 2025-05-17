@@ -22,9 +22,32 @@ constexpr T checkAndSwapToBigEndian(T value) {
     return value;
 }
 
+inline std::byte revertByteBits(std::byte byte) {
+    std::byte result{0};
+
+    for (int i = 0; i < 8; i++) {
+        result |= (byte >> (7 - i) & (std::byte{1})) << i;
+    }
+    return result;
+}
+
+enum class WriteSequence {
+    MSB,
+    LSB,
+};
 class BitWriter {
 public:
     BitWriter() {
+        _buffer.push_back(std::byte{0});
+    }
+
+    BitWriter(const std::vector<std::byte>& buffer)
+        : _buffer(buffer), _bitPos(0) {
+        _buffer.push_back(std::byte{0});
+    }
+
+    BitWriter(std::byte* buffer, size_t size)
+        : _buffer(buffer, buffer + size), _bitPos(0) {
         _buffer.push_back(std::byte{0});
     }
 
@@ -35,21 +58,47 @@ public:
         }
 
         if (bit) {
-            _buffer.back() |=
-                std::byte{static_cast<unsigned char>(1 << (7 - _bitPos))};
+            switch (_writeSequence) {
+                case WriteSequence::MSB:
+                    _buffer.back() |= (std::byte{1} << (7 - _bitPos));
+                    break;
+                case WriteSequence::LSB:
+                    _buffer.back() |= (std::byte{1} << _bitPos);
+                    break;
+            }
         }
 
         _bitPos++;
     }
 
     template <typename T>
-    void writeBits(T data, int count) {
+    void writeBitsFromMSB(T data, int count) {
         for (int i = count - 1; i >= 0; i--) {
-            // ex : 0b00000000000001101 count = 5
-            // write 0b01101 to the buffer
-            writeBit(static_cast<bool>(data >> i & T{1}));
+            writeBit(static_cast<bool>((data >> i) & T{1}));
         }
     }
+
+    void changeWriteSequence(WriteSequence sequence, bool needRevert = true) {
+        if (sequence == _writeSequence) {
+            return;
+        } else {
+            if (_bitPos % 8 != 0 && needRevert) {
+                // revert the last byte
+                _buffer.back() = revertByteBits(_buffer.back());
+            } else if(_bitPos % 8 != 0 && !needRevert) {
+                
+            }
+        }
+        _writeSequence = sequence;
+    }
+
+    template <typename T>
+    void writeBitsFromLSB(T data, int count) {
+        for (int i = 0; i < count; i++) {
+            writeBit(static_cast<bool>((data >> i) & T{1}));
+        }
+    }
+
     [[nodiscard]] size_t getBitPos() const {
         return _bitPos;
     }
@@ -61,5 +110,8 @@ public:
 private:
     std::vector<std::byte> _buffer;
     size_t _bitPos = 0;
+
+    // decide write from MSB or LSB
+    WriteSequence _writeSequence = WriteSequence::MSB;
 };
 }  // namespace f9ay

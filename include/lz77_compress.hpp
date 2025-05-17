@@ -15,7 +15,7 @@
 namespace f9ay {
 class LZ77 {
 public:
-    template <int dictSize = 4096, int bufferSize = 10,
+    template <int dictSize = 4096, int bufferSize = 50,
               ContainerConcept Container>
     static constexpr auto lz77Encode(const Container& container) {
         std::vector<

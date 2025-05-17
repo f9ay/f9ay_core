@@ -217,6 +217,12 @@ public:
             i++;
         }
     }
+
+    Matrix(const std::span<T> &span, const int _rows, const int _cols)
+        : rows(_rows), cols(_cols) {
+        data = new T[span.size()];
+        std::copy(span.begin(), span.end(), data);
+    }
     ~Matrix() {
         delete[] data;
     }

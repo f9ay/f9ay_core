@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "colors.hpp"
+#include "filter.hpp"
 #include "lz77_compress.hpp"
 #include "matrix.hpp"
 #include "matrix_concept.hpp"
@@ -17,14 +18,14 @@ class Deflate {
 public:
     template <typename T>
     static std::pair<std::unique_ptr<std::byte[]>, size_t> compress(
-        Matrix<T>& matrix) {
+        Matrix<T>& matrix, FilterType filterType) {
         // Compress the input data
 
         switch (blockType) {
             case BlockType::Uncompressed:
                 break;
             case BlockType::Fixed:
-                return _compressFixed(matrix);
+                return _compressFixed(matrix, filterType);
                 break;
             case BlockType::Dynamic:
                 break;
@@ -59,10 +60,6 @@ private:
 
             static_assert(baseCode + 143 == 0b10111111);
 
-            if (std::endian::native == std::endian::little) {
-                code = std::byteswap(code);
-            }
-
             fixedHuffmanCodesTable[i] = {code, 8};
         }
 
@@ -71,9 +68,6 @@ private:
             u_int16_t code = baseCode + (i - 144);
 
             static_assert(baseCode + (255 - 144) == 0b111111111);
-            if (std::endian::native == std::endian::little) {
-                code = std::byteswap(code);
-            }
 
             fixedHuffmanCodesTable[i] = {code, 9};
         }
@@ -84,9 +78,7 @@ private:
             constexpr u_int16_t baseCode = 0b0000000;
             u_int16_t code = baseCode + (i - 256);
             static_assert(baseCode + (279 - 256) == 0b0010111);
-            if (std::endian::native == std::endian::little) {
-                code = std::byteswap(code);
-            }
+
             fixedHuffmanCodesTable[i] = {code, 7};
         }
 
@@ -94,9 +86,7 @@ private:
             constexpr u_int16_t baseCode = 0b11000000;
             u_int16_t code = baseCode + (i - 280);
             static_assert(baseCode + (287 - 280) == 0b11000111);
-            if (std::endian::native == std::endian::little) {
-                code = std::byteswap(code);
-            }
+
             fixedHuffmanCodesTable[i] = {code, 8};
         }
 
@@ -430,32 +420,36 @@ private:
 
     template <typename T>
     static std::pair<std::unique_ptr<std::byte[]>, size_t> _compressFixed(
-        Matrix<T>& matrix) {
+        Matrix<T>& origMatrix, FilterType filterType) {
         static_assert(_fixedDistanceTable.size() == 32769,
                       "Fixed distance table size mismatch");
         static_assert(_fixedHuffmanCodesTable.size() == 288,
                       "Fixed Huffman table size mismatch");
         static_assert(_fixedLengthTable.size() == 259,
                       "Fixed length table size mismatch");
-        using value_type = std::decay_t<decltype(matrix[0, 0])>;
+        using value_type = std::decay_t<decltype(origMatrix[0, 0])>;
+
+        auto matrix = filter(origMatrix, filterType);
+        auto adler32 =
+            _calculateAdler32(reinterpret_cast<std::byte*>(matrix.raw()),
+                              matrix.row() * matrix.col());
 
         BitWriter bitWriter;
 
         // write zlib header
-        bitWriter.writeBits(std::byte{0x78}, 8);  // CMF
-        bitWriter.writeBits(std::byte{0x01}, 8);  // FLG
+        bitWriter.writeBitsFromMSB(std::byte{0x78}, 8);  // CMF
+        bitWriter.writeBitsFromMSB(std::byte{0x01}, 8);  // FLG
 
+        // start change write from MSB to LSB
+        // according to deflate spec
+
+        bitWriter.changeWriteSequence(WriteSequence::LSB);
         // write the block header
-        bitWriter.writeBit(0);  // BFINAL
-        bitWriter.writeBits(std::byte{0b00000001},
-                            2);  // BTYPE (fixed)
+        bitWriter.writeBit(1);  // BFINAL 1 == last block
+        bitWriter.writeBitsFromLSB(std::byte{0b00000001},
+                                   2);  // BTYPE (fixed)
 
-        auto rawData = matrix.raw();
-
-        auto data = reinterpret_cast<std::byte*>(rawData);
-
-        auto flattened =
-            std::span<std::byte>(data, matrix.row() * matrix.col());
+        auto flattened = matrix.flattenToSpan();
         // Apply LZ77 compression
         auto vec = LZ77::lz77Encode(flattened);
 
@@ -465,25 +459,17 @@ private:
                     _fixedHuffmanCodesTable[static_cast<u_int8_t>(
                         value.value())];
 
-                // check endian
-                if constexpr (std::endian::native == std::endian::little) {
-                    litCode = std::byteswap(litCode);
-                }
-                bitWriter.writeBits(litCode, litLength);
+                bitWriter.writeBitsFromMSB(litCode, litLength);
             } else {
                 auto [lengthCode, extraBit, extraBitLength] =
                     _fixedLengthTable[length];
                 auto [huffCode, huffLength] =
                     _fixedHuffmanCodesTable[lengthCode];
 
-                // check endian
-                if constexpr (std::endian::native == std::endian::little) {
-                    huffCode = std::byteswap(huffCode);
-                }
-                bitWriter.writeBits(huffCode, huffLength);
+                bitWriter.writeBitsFromMSB(huffCode, huffLength);
 
                 if (extraBitLength > 0) {
-                    bitWriter.writeBits(extraBit, extraBitLength);
+                    bitWriter.writeBitsFromLSB(extraBit, extraBitLength);
                 }
 
                 // write distance
@@ -491,13 +477,11 @@ private:
                     _fixedDistanceTable[offset];
 
                 // write first 5 fixed distance bits
-                bitWriter.writeBits(distCode, 5);
+                bitWriter.writeBitsFromMSB(distCode, 5);
                 if (distExtraBitLength > 0) {
                     // check endian
-                    if constexpr (std::endian::native == std::endian::little) {
-                        distExtraBit = std::byteswap(distExtraBit);
-                    }
-                    bitWriter.writeBits(distExtraBit, distExtraBitLength);
+                    bitWriter.writeBitsFromLSB(distExtraBit,
+                                               distExtraBitLength);
                 }
 
                 // if the value is not empty, write the value
@@ -507,35 +491,33 @@ private:
                         _fixedHuffmanCodesTable[static_cast<u_int8_t>(
                             value.value())];
 
-                    // check endian
-                    if constexpr (std::endian::native == std::endian::little) {
-                        litCode = std::byteswap(litCode);
-                    }
-                    bitWriter.writeBits(litCode, litLength);
+                    bitWriter.writeBitsFromMSB(litCode, litLength);
                 }
             }
         }
 
         // write end of block
         auto [eobCode, eobLength] = _fixedHuffmanCodesTable[256];
-        bitWriter.writeBits(std::byte(eobCode), eobLength);
+        bitWriter.writeBitsFromMSB(eobCode, eobLength);
 
+        // write the last byte
+        // check if the last byte is not aligned
         while (bitWriter.getBitPos() % 8 != 0) {
             bitWriter.writeBit(0);
         }
 
-        auto adler32 = _calculateAdler32(reinterpret_cast<std::byte*>(rawData),
-                                         matrix.row() * matrix.col());
+        bitWriter.changeWriteSequence(WriteSequence::MSB);
 
-        adler32 = checkAndSwapToBigEndian(adler32);
+        // adler32 = checkAndSwapToBigEndian(adler32);
 
         // write adler32
-        bitWriter.writeBits(std::byte((adler32 >> 24) & 0xFF), 8);
-        bitWriter.writeBits(std::byte((adler32 >> 16) & 0xFF), 8);
-        bitWriter.writeBits(std::byte((adler32 >> 8) & 0xFF), 8);
-        bitWriter.writeBits(std::byte(adler32 & 0xFF), 8);
+        bitWriter.writeBitsFromMSB(adler32, 32);
 
+        while (bitWriter.getBitPos() % 8 != 0) {
+            bitWriter.writeBit(0);
+        }
         auto buffer = bitWriter.getBuffer();
+
         auto size = buffer.size();
 
         auto compressedData = std::make_unique<std::byte[]>(size);
@@ -544,12 +526,13 @@ private:
     }
 
     static u_int32_t _calculateAdler32(const std::byte* data, size_t length) {
-        u_int32_t a = 1;
-        u_int32_t b = 0;
+        u_int32_t a = 1, b = 0;
+
         for (size_t i = 0; i < length; i++) {
             a = (a + static_cast<u_int32_t>(data[i])) % 65521;
             b = (b + a) % 65521;
         }
+
         return (b << 16) | a;
     }
 

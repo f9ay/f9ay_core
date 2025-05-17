@@ -133,10 +133,14 @@ int main(int argc, char** argv) {
         [&buffer, &sz, &path](auto&& arg) {
             // std::tie(buffer, sz) = Bmp::write(arg);
 
+            Matrix<colors::RGB> mtx(1, 1);
+            mtx[0, 0] =
+                colors::RGB{std::byte{0xFF}, std::byte{0x00}, std::byte{0x00}};
+
             std::ofstream out(path.parent_path() / "test.png",
                               std::ios::binary);
 
-            auto [buffer, size] = PNG::exportToByte(arg, FilterType::Paeth);
+            auto [buffer, size] = PNG::exportToByte(arg, FilterType::Up);
             out.write(reinterpret_cast<const char*>(buffer.get()), size);
         },
         result);

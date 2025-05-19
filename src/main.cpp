@@ -158,6 +158,8 @@ int main(int argc, char** argv) {
                   << ", Value: " << (value.has_value() ? *value : ' ') << "\n";
     }
 
+    std::cout << "done" << std::endl;
+
 #ifdef WIN32
     f9ay::test::windows::Windows windows{};
     std::visit([&windows](auto&& arg) { windows.show(arg); }, result);

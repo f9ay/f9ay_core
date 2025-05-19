@@ -22,29 +22,25 @@ struct RGBA {
 };
 
 struct YCbCr {
-    int8_t y, cb, cr;
+    uint8_t y, cb, cr;
 };
-
-inline int abs(const BGR& color) {
-    return std::abs(color.b) + std::abs(color.g) + std::abs(color.r);
-}
-inline int abs(const RGB& color) {
-    return std::abs(color.r) + std::abs(color.g) + std::abs(color.b);
-}
-inline int abs(const BGRA& color) {
-    return std::abs(color.b) + std::abs(color.g) + std::abs(color.r) +
-           std::abs(color.a);
-}
-inline int abs(const RGBA& color) {
-    return std::abs(color.r) + std::abs(color.g) + std::abs(color.b) +
-           std::abs(color.a);
-}
 
 template <typename T>
 concept color_type =
     std::same_as<T, colors::RGB> || std::same_as<T, colors::BGR> ||
     std::same_as<T, colors::RGBA> || std::same_as<T, colors::BGRA> ||
     std::same_as<T, colors::YCbCr>;
+
+template <color_type ColorType>
+int abs (const ColorType& color) {
+    if constexpr (sizeof(ColorType) == 4) {
+        auto [a, b, c, d] = color;
+        return std::abs(a) + std::abs(b) + std::abs(c) + std::abs(d);
+    } else {
+        auto [a, b, c] = color;
+        return std::abs(a) + std::abs(b) + std::abs(c);
+    }
+}
 
 template <color_type ColorType>
 ColorType operator+(const ColorType& l, const ColorType& r) {

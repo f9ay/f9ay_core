@@ -63,23 +63,24 @@ public:
         auto span = std::span<uint8_t>(
             expandedData, matrix.row() * matrix.col() * sizeof(ElementType));
 
-        Matrix<uint8_t> expandedMatrix{
+        Matrix<uint8_t> expandedMatrix {
             span, matrix.row(),
             matrix.col() * static_cast<int>(sizeof(ElementType))};
         auto [compressedData, compressedSize] =
-            deflate::Deflate<deflate::BlockType::Fixed>::compress(
-                expandedMatrix, filterType);
-        size_t size = sizeof(PNGSignature) +  // PNG簽名
-                      4 +                     // IHDR長度欄位
-                      sizeof(IDHRChunk) +     // IHDR區塊
-                      4 +                     // IHDR的CRC
-                      4 +                     // IDAT長度欄位
-                      sizeof(IDATChunk) +     // IDAT區塊頭
-                      compressedSize +        // 壓縮後的數據
-                      4 +                     // IDAT的CRC
-                      4 +                     // IEND長度欄位
-                      sizeof(IENDChunk) +     // IEND區塊
-                      4;                      // IEND的CRC
+            deflate::Deflate<deflate::BlockType::Fixed>::compress(expandedMatrix, filterType);
+
+        size_t size = sizeof(PNGSignature) +          /* PNG簽名  */          
+                      4 +                             /* IHDR長度欄位  */             
+                      sizeof(IDHRChunk) +             /* IHDR區塊        */   
+                      4 +                             /* IHDR的CRC */
+                      4 +                             /* IDAT長度欄位 */       
+                      sizeof(IDATChunk) +             /* IDAT區塊頭     */     
+                      compressedSize +                /* 壓縮後的數據 */
+                      4 +                             /* IDAT的CRC      */ 
+                      4 +                             /* IEND長度欄位 */
+                      sizeof(IENDChunk) +             /* IEND區塊 */
+                      4;                              /* IEND的CRC   */ 
+        
         std::unique_ptr<std::byte[]> data(new std::byte[size]);
         auto pngSignature =
             PNGSignature{{std::byte{0x89}, std::byte{0x50}, std::byte{0x4e},

@@ -121,7 +121,7 @@ private:
         const auto rawRowSize = align<4>(rowSize);
         for (int i = 0; i < std::abs(infoHeader->height); i++) {
             const std::byte *row = nullptr;
-            if (seqRead) {
+            if (seqRead) {  // suppose compiler 會 優化
                 row = data + i * rawRowSize;
             } else {
                 row = data + (infoHeader->height - 1 - i) * rawRowSize;

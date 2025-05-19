@@ -61,10 +61,20 @@ public:
 private:
     static Matrix<colors::YCbCr> toYCbCr(const Matrix<colors::RGB> &src) {
         Matrix<colors::YCbCr> result(src.row(), src.col());
+#pragma loop(hint_parallel(0))
         for (int i = 0; i < src.row(); i++) {
             for (int j = 0; j < src.col(); j++) {
+                result[i, j] = {0.299f * src[i, j].r + 0.587f * src[i, j].g +
+                                    0.114f * src[i, j].b,
+                                -0.168736f * src[i, j].r -
+                                    0.331364f * src[i, j].g +
+                                    0.5f * src[i, j].b + 128,
+                                0.5f * src[i, j].r - 0.418688f * src[i, j].g -
+                                    0.081312f * src[i, j].b + 128};
             }
         }
+        return result;
     }
+}
 };
 }  // namespace f9ay

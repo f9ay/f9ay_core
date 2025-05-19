@@ -135,7 +135,7 @@ int main(int argc, char** argv) {
 
             Matrix<colors::RGB> mtx(1, 1);
             mtx[0, 0] =
-                colors::RGB{std::byte{0xFF}, std::byte{0x00}, std::byte{0x00}};
+                {0xFF, 0x00, 0x00};
 
             std::ofstream out(path.parent_path() / "test.png",
                               std::ios::binary);

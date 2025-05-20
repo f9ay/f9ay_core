@@ -2,9 +2,15 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <ranges>
 #include <utility>
+#include <vector>
 
+#include "dct.hpp"
 #include "importer.hpp"
+#include "matrix.hpp"
+#include "matrix_concept.hpp"
+#include "matrix_view.hpp"
 
 namespace f9ay {
 class Jpeg {
@@ -54,27 +60,92 @@ public:
 
     static std::pair<std::unique_ptr<std::byte[]>, size_t> write(
         const Matrix<colors::RGB> &src) {
-        Matrix<colors::YCbCr> mtx = toYCbCr(src);
+        Matrix<colors::YCbCr> ycbcr = toYCbCr(src);
+        // 分離有助於 cache
+        // TODO Downsampling
+        Matrix<uint8_t> Y(src.col(), src.row());
+        Matrix<uint8_t> Cb(src.col() / 2, src.row() / 2);
+        Matrix<uint8_t> Cr(src.col() / 2, src.row() / 2);
+#pragma loop(hint_parallel(0))
+        for (int i = 0; i < src.row(); i++) {
+            for (int j = 0; j < src.col(); j++) {
+                Y[i, j] = ycbcr[i, j].y;
+                Cb[i, j] = ycbcr[i, j].cb;
+                Cr[i, j] = ycbcr[i, j].cr;
+            }
+        }
+        auto view_y = Matrix_view(Y);
+        auto view_cb = Matrix_view(Cb);
+        auto view_cr = Matrix_view(Cr);
+
+        auto split_y = split<8>(view_y);
+        auto split_cb = split<8>(view_cb);
+        auto split_cr = split<8>(view_cr);
+
+        auto dct_y = split_y.transform(Dct<8>::dct<uint8_t>);
+        auto dct_cb = split_cb.transform(Dct<8>::dct<uint8_t>);
+        auto dct_cr = split_cr.transform(Dct<8>::dct<uint8_t>);
+
+        //         // Downsampling to  4:2:0
+        //         Matrix<uint8_t> Cb(src.col() / 2, src.row() / 2);
+        //         Matrix<uint8_t> Cr(src.col() / 2, src.row() / 2);
+        // #pragma loop(hint_parallel(0))
+        //         for (int i = 0; i < Cb.row(); i++) {
+        //             for (int j = 0; j < Cb.col(); j++) {
+        //                 Cb[i, j] = ycbcr[i * 2, j * 2].cb;
+        //                 Cr[i, j] = ycbcr[i * 2 + 1, j * 2].cr;
+        //             }
+        //         }
+
         return {nullptr, 0};
     }
 
 private:
     static Matrix<colors::YCbCr> toYCbCr(const Matrix<colors::RGB> &src) {
         Matrix<colors::YCbCr> result(src.row(), src.col());
+// 自動向量化
 #pragma loop(hint_parallel(0))
         for (int i = 0; i < src.row(); i++) {
             for (int j = 0; j < src.col(); j++) {
-                result[i, j] = {0.299f * src[i, j].r + 0.587f * src[i, j].g +
-                                    0.114f * src[i, j].b,
-                                -0.168736f * src[i, j].r -
-                                    0.331364f * src[i, j].g +
-                                    0.5f * src[i, j].b + 128,
-                                0.5f * src[i, j].r - 0.418688f * src[i, j].g -
-                                    0.081312f * src[i, j].b + 128};
+                result[i, j] = {
+                    static_cast<uint8_t>(0.299f * src[i, j].r +
+                                         0.587f * src[i, j].g +
+                                         0.114f * src[i, j].b),
+                    static_cast<uint8_t>(-0.168736f * src[i, j].r -
+                                         0.331364f * src[i, j].g +
+                                         0.5f * src[i, j].b + 128),
+                    static_cast<uint8_t>(0.5f * src[i, j].r -
+                                         0.418688f * src[i, j].g -
+                                         0.081312f * src[i, j].b + 128)};
             }
         }
         return result;
     }
-}
+
+    template <int N, int M = N>
+    static Matrix<Matrix<uint8_t>> split(
+        Matrix_view<View_Type::origin, uint8_t, 0> mtx) {
+        const int row_sz = mtx.row() / N + mtx.row() % N != 0;
+        const int col_sz = mtx.col() / M + mtx.col() % M != 0;
+        Matrix<Matrix<uint8_t>> result(row_sz, col_sz);
+        for (int i = 0; i < row_sz; i++) {
+            for (int j = 0; j < col_sz; j++) {
+                Matrix<uint8_t> block(N, M);
+                for (int k = 0; k < N; k++) {
+                    for (int l = 0; l < M; l++) {
+                        // 希望編譯器會優化
+                        if (i * N + k >= mtx.row() || j * M + l >= mtx.col())
+                            [[unlikely]] {
+                            block[k, l] = 0;  // TODO 鮮甜橙 0 後面再改
+                        } else {
+                            block[k, l] = mtx[i * N + k, j * M + l];
+                        }
+                    }
+                }
+                result[i, j] = std::move(block);
+            }
+        }
+        return result;
+    }
 };
 }  // namespace f9ay

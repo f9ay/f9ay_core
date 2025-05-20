@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <format>
 #include <iostream>
+#include <mdspan>
 #include <span>
 
 namespace f9ay {
@@ -171,6 +172,19 @@ public:
         return data;
     }
 
+    template <typename Func>
+    decltype(auto) transform(Func &&func) {
+#pragma loop(hint_parallel(0))
+        for (int i = 0; i < row(); i++) {
+            for (int j = 0; j < col(); j++) {
+                data[i, j] = func(data[i, j]);
+            }
+        }
+        return *this;
+    }
+
+    // lateinit
+    Matrix() : data(nullptr), rows(0), cols(0) {}
     Matrix(const int _rows, const int _cols) : rows(_rows), cols(_cols) {
         data = new T[rows * cols]{};
     }
@@ -179,6 +193,20 @@ public:
         for (size_t i = 0; i < rows * cols; i++) {
             data[i] = mtx.data[i];
         }
+    }
+    Matrix &operator=(Matrix &&other) {
+        if (data != nullptr) {
+            std::println(
+                "warnning matrix 的移動建構子 賦值給不是 lateinit 的 matrix");
+            delete[] data;
+        }
+        data = other.data;
+        rows = other.rows;
+        cols = other.cols;
+        other.data = nullptr;
+        other.rows = 0;
+        other.cols = 0;
+        return *this;
     }
     Matrix &operator=(const Matrix &) = delete;
     Matrix(Matrix &&other) noexcept
@@ -199,6 +227,9 @@ public:
     }
     std::span<T> flattenToSpan() {
         return std::span<T>(data, rows * cols);
+    }
+    auto span() const {
+        return std::mdspan(data, rows, cols);
     }
     /*
         {{1, 2, 3},

@@ -172,12 +172,47 @@ public:
         return data;
     }
 
+    // TODO 用表達式模板優化
     template <typename Func>
     decltype(auto) transform(Func &&func) {
 #pragma loop(hint_parallel(0))
         for (int i = 0; i < row(); i++) {
             for (int j = 0; j < col(); j++) {
-                data[i, j] = func(data[i, j]);
+                data[i, j] = std::move(func(data[i, j]));
+            }
+        }
+        return *this;
+    }
+
+    template <typename Func>
+    decltype(auto) for_each(Func &&func) {
+#pragma loop(hint_parallel(0))
+        for (int i = 0; i < row(); i++) {
+            for (int j = 0; j < col(); j++) {
+                func(data[i, j]);
+            }
+        }
+        return *this;
+    }
+
+    decltype(auto) round_div(const Matrix &other) {
+        if (row() != other.row() || col() != other.col()) [[unlikely]] {
+            throw std::invalid_argument("Matrix size does not match");
+        }
+#pragma loop(hint_parallel(0))
+        for (int i = 0; i < row(); i++) {
+            for (int j = 0; j < col(); j++) {
+                if constexpr (std::is_integral_v<T>) {
+                    // suppose compiler 會 idiv 優化
+                    auto tmp = (*this)[i, j] / other[i][j];
+                    if ((*this)[i, j] % other[i][j] >= other[i][j] / 2) {
+                        (*this)[i, j] = tmp + 1;
+                    } else {
+                        (*this)[i, j] = tmp;
+                    }
+                } else {  // 浮點 或 其他不管
+                    (*this)[i, j] /= other[i][j];
+                }
             }
         }
         return *this;
@@ -195,6 +230,9 @@ public:
         }
     }
     Matrix &operator=(Matrix &&other) {
+        if (this == &other) {
+            return *this;
+        }
         if (data != nullptr) {
             std::println(
                 "warnning matrix 的移動建構子 賦值給不是 lateinit 的 matrix");
@@ -211,6 +249,9 @@ public:
     Matrix &operator=(const Matrix &) = delete;
     Matrix(Matrix &&other) noexcept
         : data(other.data), rows(other.rows), cols(other.cols) {
+        if (this == &other) {
+            return;
+        }
         other.data = nullptr;
         other.rows = 0;
         other.cols = 0;

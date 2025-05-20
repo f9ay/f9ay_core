@@ -82,9 +82,42 @@ public:
         auto split_cb = split<8>(view_cb);
         auto split_cr = split<8>(view_cr);
 
-        auto dct_y = split_y.transform(Dct<8>::dct<uint8_t>);
-        auto dct_cb = split_cb.transform(Dct<8>::dct<uint8_t>);
-        auto dct_cr = split_cr.transform(Dct<8>::dct<uint8_t>);
+        // TODO check inline or not
+        auto sub_128 = [](const uint8_t x) {
+            return static_cast<uint8_t>(std::bit_cast<int8_t>(x) -
+                                        static_cast<int8_t>(128));
+        };
+
+        for (const auto m_ptr : {&split_y, &split_cb, &split_cr}) {
+            auto &m = *m_ptr;
+
+            // TODO 用表達式模板優化
+            m.transform(sub_128)
+                .transform(Dct<8>::dct<int8_t, uint8_t>)
+                .transform([](Matrix<uint8_t> &block) -> decltype(auto) {
+                    block.round_div(Quantization_Matrix);
+                    return block;
+                })
+                .for_each([](const Matrix<uint8_t> &block) {
+                    if (block.row() != block.col()) [[unlikely]] {
+                        // just for check
+                        // impossible
+                        throw std::logic_error("size match");
+                    }
+                    for (auto [i, j] : zigzag(block.row())) {
+                        ///////////////////////////
+                        /// 給出一個陣列
+                        //////////////////////////
+                    }
+                });
+        }
+
+        // auto &dct_y =
+        // split_y.transform(sub_128).transform(Dct<8>::dct<int8_t>); auto
+        // &dct_cb =
+        //     split_cb.transform(sub_128).transform(Dct<8>::dct<int8_t>);
+        // auto &dct_cr =
+        //     split_cr.transform(sub_128).transform(Dct<8>::dct<int8_t>);
 
         //         // Downsampling to  4:2:0
         //         Matrix<uint8_t> Cb(src.col() / 2, src.row() / 2);
@@ -147,5 +180,23 @@ private:
         }
         return result;
     }
+
+    static constexpr auto zigzag(const int n) {
+        std::vector<std::pair<int, int>> res(n * n);
+        int index = 0;
+        for (int line = 0; line < 2 * n; line++) {
+        }
+        return res;
+    }
+
+    static constexpr Matrix<uint8_t> Quantization_Matrix = {
+        {16, 11, 10, 16, 24, 40, 51, 61},
+        {12, 12, 14, 19, 26, 58, 60, 55},
+        {14, 13, 16, 24, 40, 57, 69, 56},
+        {14, 17, 22, 29, 51, 87, 80, 62},
+        {18, 22, 37, 56, 68, 109, 103, 77},
+        {24, 35, 55, 64, 81, 104, 113, 92},
+        {49, 64, 78, 87, 103, 121, 120, 101},
+        {72, 92, 95, 98, 112, 100, 103, 99}};
 };
 }  // namespace f9ay

@@ -1,22 +1,24 @@
 #pragma once
 
-#include "matrix_concept.hpp"
-#include "matrix.hpp"
-
 #include <numbers>
+
+#include "matrix.hpp"
+#include "matrix_concept.hpp"
+#include "matrix_view.hpp"
 
 namespace f9ay {
 
-template<int N, int M>
+template <int N, int M = N>
 class Dct {
     using fl_t = float;
+
 public:
-    template<MATRIX_CONCEPT MATRIX_TYPE>
-    static auto dct(MATRIX_TYPE matrix) {
+    template <typename T>
+    static auto dct(Matrix_view<View_Type::origin, T> matrix) {
         if (matrix.row() != N || matrix.col() != M) {
             throw std::invalid_argument("matrix size not match");
         }
-        Matrix<int> result(matrix.row(), matrix.col());
+        Matrix<T> result(matrix.row(), matrix.col());
         //
         // const int N = matrix.row();
         // const int M = matrix.col();
@@ -26,27 +28,31 @@ public:
                 fl_t sum = 0;
                 for (int i = 0; i < matrix.col(); ++i) {
                     for (int j = 0; j < matrix.col(); ++j) {
-                        sum += matrix[i, j] \
-                            * std::cos(((2 * i + 1) * u * std::numbers::pi_v<fl_t>) / (2 * N)) \
-                            * std::cos(((2 * j + 1) * v * std::numbers::pi_v<fl_t>) / (2 * M));
+                        sum += matrix[i, j] *
+                               std::cos(((2 * i + 1) * u *
+                                         std::numbers::pi_v<fl_t>) /
+                                        (2 * N)) *
+                               std::cos(((2 * j + 1) * v *
+                                         std::numbers::pi_v<fl_t>) /
+                                        (2 * M));
                     }
                 }
                 result[u, v] = round((0.25) * normalize_constant(u) *
-                                                normalize_constant(v) * sum);
+                                     normalize_constant(v) * sum);
             }
         }
 
         return result;
     }
+
 private:
     static constexpr auto normalize_constant(const int u) {
         if (u != 1) {
             return 1 / sqrt(2);
-        }
-        else {
+        } else {
             return 1.;
         }
     }
 };
 
-};
+};  // namespace f9ay

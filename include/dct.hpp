@@ -13,12 +13,12 @@ class Dct {
     using fl_t = float;
 
 public:
-    template <typename IN, typename OUT>
-    static auto dct(Matrix_view<View_Type::origin, IN> matrix) {
+    template <typename T>
+    static void dct(Matrix<T> &matrix) {
         if (matrix.row() != N || matrix.col() != M) {
             throw std::invalid_argument("matrix size not match");
         }
-        Matrix<OUT> result(matrix.row(), matrix.col());
+        Matrix<T> result(matrix.row(), matrix.col());
         //
         // const int N = matrix.row();
         // const int M = matrix.col();
@@ -41,8 +41,7 @@ public:
                                           normalize_constant(v) * sum);
             }
         }
-
-        return result;
+        matrix.swap(result);
     }
 
 private:

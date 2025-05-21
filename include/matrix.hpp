@@ -186,8 +186,8 @@ public:
     }
 
     template <typename Func>
-    auto trans_convert(Func &&func)
-        -> Matrix<decltype(func(std::declval<T>()))> {
+    auto trans_convert(Func &&func) {
+        // 不能 return reference
         Matrix<decltype(func(self()[0, 0]))> result(row(), col());
 #pragma loop(hint_parallel(0))
         for (int i = 0; i < row(); i++) {
@@ -274,8 +274,7 @@ public:
         std::copy(other.data, other.data + other.rows * other.cols, data);
         return *this;
     }
-    Matrix(Matrix &&other) noexcept
-        : data(other.data), rows(other.rows), cols(other.cols) {
+    Matrix(Matrix &&other) noexcept : data(other.data), rows(other.rows), cols(other.cols) {
         if (this == &other) {
             return;
         }
@@ -323,11 +322,15 @@ public:
         }
     }
 
-    Matrix(const std::span<T> &span, const int _rows, const int _cols)
-        : rows(_rows), cols(_cols) {
+    Matrix(const std::span<T> &span, const int _rows, const int _cols) : rows(_rows), cols(_cols) {
         data = new T[span.size()];
         std::copy(span.begin(), span.end(), data);
     }
+
+    Matrix(std::vector<T> &&vec, const int _rows, const int _cols) : rows(_rows), cols(_cols) {
+        data = the_pointer_heist(vec);
+    }
+
     ~Matrix() {
         delete[] data;
     }
@@ -354,22 +357,23 @@ inline std::ostream &operator<<(std::ostream &os, const Matrix<int> &matrix) {
 };  // namespace f9ay
 
 template <typename T, typename Char_T>
-struct std::formatter<f9ay::Matrix<T>, Char_T>
-    : std::formatter<std::string, Char_T> {
+struct std::formatter<f9ay::Matrix<T>, Char_T> : std::formatter<std::string, Char_T> {
     auto format(const f9ay::Matrix<T> &matrix, auto &ctx) const {
         auto out = ctx.out();
-        out = std::format_to(out,
-                             "================================================="
-                             "===============================\n");
+        out = std::format_to(
+            out,
+            "================================================="
+            "===============================\n");
         for (int i = 0; i < matrix.row(); i++) {
             for (int j = 0; j < matrix.col(); j++) {
                 out = std::format_to(out, "{} ", matrix[i][j]);
             }
             out = std::format_to(out, "\n");
         }
-        out = std::format_to(out,
-                             "================================================="
-                             "===============================\n");
+        out = std::format_to(
+            out,
+            "================================================="
+            "===============================\n");
         return out;
     }
 };

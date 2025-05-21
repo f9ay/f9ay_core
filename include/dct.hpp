@@ -13,12 +13,12 @@ class Dct {
     using fl_t = float;
 
 public:
-    template <typename T>
-    static void dct(Matrix<T> &matrix) {
+    template <typename IN, typename OUT>
+    static auto dct(Matrix<IN> &matrix) {
         if (matrix.row() != N || matrix.col() != M) {
             throw std::invalid_argument("matrix size not match");
         }
-        Matrix<T> result(matrix.row(), matrix.col());
+        Matrix<OUT> result(matrix.row(), matrix.col());
         //
         // const int N = matrix.row();
         // const int M = matrix.col();
@@ -28,20 +28,14 @@ public:
                 fl_t sum = 0;
                 for (int i = 0; i < matrix.col(); ++i) {
                     for (int j = 0; j < matrix.col(); ++j) {
-                        sum += matrix[i, j] *
-                               std::cos(((2 * i + 1) * u *
-                                         std::numbers::pi_v<fl_t>) /
-                                        (2 * N)) *
-                               std::cos(((2 * j + 1) * v *
-                                         std::numbers::pi_v<fl_t>) /
-                                        (2 * M));
+                        sum += matrix[i, j] * std::cos(((2 * i + 1) * u * std::numbers::pi_v<fl_t>) / (2 * N)) *
+                               std::cos(((2 * j + 1) * v * std::numbers::pi_v<fl_t>) / (2 * M));
                     }
                 }
-                result[u, v] = std::round((0.25) * normalize_constant(u) *
-                                          normalize_constant(v) * sum);
+                result[u, v] = std::round((0.25) * normalize_constant(u) * normalize_constant(v) * sum);
             }
         }
-        matrix.swap(result);
+        return result;
     }
 
 private:

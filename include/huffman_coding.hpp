@@ -14,18 +14,10 @@
 namespace f9ay {
 template <typename T>
 struct HuffmanNode {
-    HuffmanNode(size_t freq, T val)
-        : frequency(freq),
-          data(std::make_optional(val)),
-          left(nullptr),
-          right(nullptr) {}
+    HuffmanNode(size_t freq, T val) : frequency(freq), data(std::make_optional(val)), left(nullptr), right(nullptr) {}
 
-    HuffmanNode(size_t freq, std::unique_ptr<HuffmanNode<T>>& left,
-                std::unique_ptr<HuffmanNode<T>>& right)
-        : frequency(freq),
-          left(std::move(left)),
-          right(std::move(right)),
-          data(std::nullopt) {}
+    HuffmanNode(size_t freq, std::unique_ptr<HuffmanNode<T>>& left, std::unique_ptr<HuffmanNode<T>>& right)
+        : frequency(freq), left(std::move(left)), right(std::move(right)), data(std::nullopt) {}
 
     size_t frequency;
     std::optional<T> data;
@@ -33,15 +25,14 @@ struct HuffmanNode {
     std::unique_ptr<HuffmanNode<T>> right;
 
     bool operator==(const HuffmanNode& other) const {
-        return frequency == other.frequency && data == other.data &&
-               left == other.left && right == other.right;
+        return frequency == other.frequency && data == other.data && left == other.left && right == other.right;
     }
     bool operator!=(const HuffmanNode& other) const {
         return !(*this == other);
     }
 };
 
-template <ContainerConcept Container>
+template <typename T>
 class HuffmanCoding {
 public:
     HuffmanCoding() = default;
@@ -50,11 +41,11 @@ public:
     // user need to build the tree first
     // then they can use getCodeMap to get the code map
     // and they can use
+    template <ContainerConcept Container>
+        requires std::same_as<typename Container::value_type, T>
     void buildTree(const Container& data) {
-        using NodePtr =
-            std::unique_ptr<HuffmanNode<typename Container::value_type>>;
-        std::priority_queue<NodePtr, std::vector<NodePtr>, CompareNodes>
-            nodesPq;
+        using NodePtr = std::unique_ptr<HuffmanNode<T>>;
+        std::priority_queue<NodePtr, std::vector<NodePtr>, CompareNodes> nodesPq;
 
         // count every element frequency
         // and build the map
@@ -71,9 +62,7 @@ public:
         // and push them to the priority queue
         // this will be the leaf nodes
         for (auto& [element, frequency] : _elementToFrequencyMap) {
-            auto node =
-                std::make_unique<HuffmanNode<typename Container::value_type>>(
-                    frequency, element);
+            auto node = std::make_unique<HuffmanNode<typename Container::value_type>>(frequency, element);
             nodesPq.push(std::move(node));
         }
 
@@ -91,7 +80,7 @@ public:
     // decode the data with the huffman code
     // it will recursively decode the data
     // and return the decoded data
-    Container::value_type decode(const std::vector<std::byte>& data) {
+    T decode(const std::vector<std::byte>& data) {
         if (_root == nullptr) {
             throw std::runtime_error("Huffman tree not built");
         }
@@ -99,8 +88,7 @@ public:
         return _decodeRecursively(data, (size_t)0, _root);
     }
 
-    std::unordered_map<typename Container::value_type, std::vector<std::byte>>
-    getCodeMap() {
+    std::unordered_map<T, std::vector<std::byte>> getCodeMap() {
         if (_root == nullptr) {
             throw std::runtime_error("Huffman tree not built");
         }
@@ -111,8 +99,7 @@ private:
     // Custom comparator for the priority queue
     // if lhs > rhs, then rhs will pop earlier than lhs
     struct CompareNodes {
-        using NodePtr =
-            std::unique_ptr<HuffmanNode<typename Container::value_type>>;
+        using NodePtr = std::unique_ptr<HuffmanNode<T>>;
         bool operator()(const NodePtr& lhs, const NodePtr& rhs) const {
             return lhs->frequency > rhs->frequency;
         }
@@ -120,8 +107,7 @@ private:
 
     // recursive function to build the huffman tree
     void _recursiveBuildTree(auto& nodePq) {
-        using NodePtr =
-            std::unique_ptr<HuffmanNode<typename Container::value_type>>;
+        using NodePtr = std::unique_ptr<HuffmanNode<T>>;
         // if there is no nodePq, then we can't build the tree
         if (nodePq.empty()) {
             throw std::runtime_error("No nodePq available to build tree");
@@ -143,9 +129,7 @@ private:
         // create a new node with the sum of the two frequencies
         // and push it to the priority queue
         auto newNode =
-            std::make_unique<HuffmanNode<typename Container::value_type>>(
-                leftNode->frequency + rightNode->frequency, leftNode,
-                rightNode);
+            std::make_unique<HuffmanNode<T>>(leftNode->frequency + rightNode->frequency, leftNode, rightNode);
 
         nodePq.push(std::move(newNode));
 
@@ -177,10 +161,8 @@ private:
      * of the Huffman code during the recursive traversal. It is passed by
      * value.
      */
-    void _getCodeRecursively(
-        std::unique_ptr<HuffmanNode<typename Container::value_type>>& node,
-        const typename Container::value_type& element,
-        std::vector<std::byte> encodedData) {
+    void _getCodeRecursively(std::unique_ptr<HuffmanNode<T>>& node, const T& element,
+                             std::vector<std::byte> encodedData) {
         // leaf node
         if (node->left == nullptr && node->right == nullptr) {
             // if the target element is found, then we can store it in the map
@@ -209,9 +191,7 @@ private:
     /// @param index The current index in the encoded data.
     /// @param node The current node in the Huffman tree.
     /// @return The decoded element.
-    typename Container::value_type _decodeRecursively(
-        std::vector<std::byte> data, size_t index,
-        std::unique_ptr<HuffmanNode<typename Container::value_type>>& node) {
+    typename T _decodeRecursively(std::vector<std::byte> data, size_t index, std::unique_ptr<HuffmanNode<T>>& node) {
         if (!node) {
             throw std::runtime_error("Invalid code");
         }
@@ -231,10 +211,8 @@ private:
             return _decodeRecursively(data, index + 1, node->right);
         }
     }
-    std::unique_ptr<HuffmanNode<typename Container::value_type>> _root;
-    std::unordered_map<typename Container::value_type, std::vector<std::byte>>
-        _codeMap;
-    std::unordered_map<typename Container::value_type, size_t>
-        _elementToFrequencyMap;
+    std::unique_ptr<HuffmanNode<T>> _root;
+    std::unordered_map<T, std::vector<std::byte>> _codeMap;
+    std::unordered_map<T, size_t> _elementToFrequencyMap;
 };
 }  // namespace f9ay

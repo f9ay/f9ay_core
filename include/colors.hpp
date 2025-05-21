@@ -6,451 +6,124 @@
 namespace f9ay::colors {
 
 struct BGR {
-    std::byte b, g, r;
-
-    BGR operator+(const BGR& other) const {
-        return BGR{
-            std::byte(static_cast<char>(b) + static_cast<char>(other.b)),
-            std::byte(static_cast<char>(g) + static_cast<char>(other.g)),
-            std::byte(static_cast<char>(r) + static_cast<char>(other.r))};
-    }
-    BGR operator+(int val) const {
-        return {std::byte(static_cast<char>(b) + val),
-                std::byte(static_cast<char>(g) + val),
-                std::byte(static_cast<char>(r) + val)};
-    }
-    BGR operator-(const BGR& other) const {
-        return BGR{
-            std::byte(static_cast<char>(b) - static_cast<char>(other.b)),
-            std::byte(static_cast<char>(g) - static_cast<char>(other.g)),
-            std::byte(static_cast<char>(r) - static_cast<char>(other.r))};
-    }
-    BGR operator-(int val) const {
-        return BGR{std::byte(static_cast<char>(b) - val),
-                   std::byte(static_cast<char>(g) - val),
-                   std::byte(static_cast<char>(r) - val)};
-    }
-    BGR operator/(int val) const {
-        return BGR{std::byte(static_cast<char>(b) / val),
-                   std::byte(static_cast<char>(g) / val),
-                   std::byte(static_cast<char>(r) / val)};
-    }
-    BGR operator*(int val) const {
-        return BGR{std::byte(static_cast<char>(b) * val),
-                   std::byte(static_cast<char>(g) * val),
-                   std::byte(static_cast<char>(r) * val)};
-    }
-    BGR& operator+=(const BGR& other) {
-        b = std::byte(static_cast<char>(b) + static_cast<char>(other.b));
-        g = std::byte(static_cast<char>(g) + static_cast<char>(other.g));
-        r = std::byte(static_cast<char>(r) + static_cast<char>(other.r));
-        return *this;
-    }
-    BGR& operator+=(int val) {
-        b = std::byte(static_cast<char>(b) + val);
-        g = std::byte(static_cast<char>(g) + val);
-        r = std::byte(static_cast<char>(r) + val);
-        return *this;
-    }
-    BGR& operator-=(const BGR& other) {
-        b = std::byte(static_cast<char>(b) - static_cast<char>(other.b));
-        g = std::byte(static_cast<char>(g) - static_cast<char>(other.g));
-        r = std::byte(static_cast<char>(r) - static_cast<char>(other.r));
-        return *this;
-    }
-    BGR& operator-=(int val) {
-        b = std::byte(static_cast<char>(b) - val);
-        g = std::byte(static_cast<char>(g) - val);
-        r = std::byte(static_cast<char>(r) - val);
-        return *this;
-    }
-    BGR& operator/=(int val) {
-        b = std::byte(static_cast<char>(b) / val);
-        g = std::byte(static_cast<char>(g) / val);
-        r = std::byte(static_cast<char>(r) / val);
-        return *this;
-    }
-    BGR& operator*=(int val) {
-        b = std::byte(static_cast<char>(b) * val);
-        g = std::byte(static_cast<char>(g) * val);
-        r = std::byte(static_cast<char>(r) * val);
-        return *this;
-    }
-    bool operator==(const BGR& other) const {
-        return b == other.b && g == other.g && r == other.r;
-    }
-    bool operator!=(const BGR& other) const {
-        return !(*this == other);
-    }
-
-    bool operator<(const BGR& other) const {
-        return std::tie(b, g, r) < std::tie(other.b, other.g, other.r);
-    }
+    uint8_t b, g, r;
 };
 
 struct RGB {
-    std::byte r, g, b;
-    RGB operator+(const RGB& other) const {
-        return RGB{
-            std::byte(static_cast<char>(r) + static_cast<char>(other.r)),
-            std::byte(static_cast<char>(g) + static_cast<char>(other.g)),
-            std::byte(static_cast<char>(b) + static_cast<char>(other.b))};
-    }
-    RGB operator-(const RGB& other) {
-        r = std::byte(static_cast<char>(r) - static_cast<char>(other.r));
-        g = std::byte(static_cast<char>(g) - static_cast<char>(other.g));
-        b = std::byte(static_cast<char>(b) - static_cast<char>(other.b));
-        return *this;
-    }
-    RGB operator-(int val) const {
-        return RGB{std::byte(static_cast<char>(r) - val),
-                   std::byte(static_cast<char>(g) - val),
-                   std::byte(static_cast<char>(b) - val)};
-    }
-    RGB operator/(int val) const {
-        return RGB{std::byte(static_cast<char>(r) / val),
-                   std::byte(static_cast<char>(g) / val),
-                   std::byte(static_cast<char>(b) / val)};
-    }
-    RGB operator*(int val) const {
-        return RGB{std::byte(static_cast<char>(r) * val),
-                   std::byte(static_cast<char>(g) * val),
-                   std::byte(static_cast<char>(b) * val)};
-    }
-    RGB& operator+=(const RGB& other) {
-        r = std::byte(static_cast<char>(r) + static_cast<char>(other.r));
-        g = std::byte(static_cast<char>(g) + static_cast<char>(other.g));
-        b = std::byte(static_cast<char>(b) + static_cast<char>(other.b));
-        return *this;
-    }
-    RGB& operator+=(int val) {
-        r = std::byte(static_cast<char>(r) + val);
-        g = std::byte(static_cast<char>(g) + val);
-        b = std::byte(static_cast<char>(b) + val);
-        return *this;
-    }
-    RGB& operator-=(const RGB& other) {
-        r = std::byte(static_cast<char>(r) - static_cast<char>(other.r));
-        g = std::byte(static_cast<char>(g) - static_cast<char>(other.g));
-        b = std::byte(static_cast<char>(b) - static_cast<char>(other.b));
-        return *this;
-    }
-    RGB& operator-=(int val) {
-        r = std::byte(static_cast<char>(r) - val);
-        g = std::byte(static_cast<char>(g) - val);
-        b = std::byte(static_cast<char>(b) - val);
-        return *this;
-    }
-    RGB& operator/=(int val) {
-        r = std::byte(static_cast<char>(r) / val);
-        g = std::byte(static_cast<char>(g) / val);
-        b = std::byte(static_cast<char>(b) / val);
-        return *this;
-    }
-    RGB& operator*=(int val) {
-        r = std::byte(static_cast<char>(r) * val);
-        g = std::byte(static_cast<char>(g) * val);
-        b = std::byte(static_cast<char>(b) * val);
-        return *this;
-    }
-    bool operator==(const RGB& other) const {
-        return r == other.r && g == other.g && b == other.b;
-    }
-    bool operator!=(const RGB& other) const {
-        return !(*this == other);
-    }
-    bool operator<(const RGB& other) const {
-        return std::tie(r, g, b) < std::tie(other.r, other.g, other.b);
-    }
+    uint8_t r, g, b;
 };
 
 struct BGRA {
-    std::byte b, g, r, a;
-    BGRA operator+(const BGRA& other) const {
-        return BGRA{
-            std::byte(static_cast<char>(b) + static_cast<char>(other.b)),
-            std::byte(static_cast<char>(g) + static_cast<char>(other.g)),
-            std::byte(static_cast<char>(r) + static_cast<char>(other.r)),
-            std::byte(static_cast<char>(a) + static_cast<char>(other.a))};
-    }
-    BGRA operator+(int val) const {
-        return BGRA{std::byte(static_cast<char>(b) + val),
-                    std::byte(static_cast<char>(g) + val),
-                    std::byte(static_cast<char>(r) + val),
-                    std::byte(static_cast<char>(a) + val)};
-    }
-    BGRA operator-(const BGRA& other) const {
-        return BGRA{
-            std::byte(static_cast<char>(b) - static_cast<char>(other.b)),
-            std::byte(static_cast<char>(g) - static_cast<char>(other.g)),
-            std::byte(static_cast<char>(r) - static_cast<char>(other.r)),
-            std::byte(static_cast<char>(a) - static_cast<char>(other.a))};
-    }
-    BGRA operator-(int val) const {
-        return BGRA{std::byte(static_cast<char>(b) - val),
-                    std::byte(static_cast<char>(g) - val),
-                    std::byte(static_cast<char>(r) - val),
-                    std::byte(static_cast<char>(a) - val)};
-    }
-    BGRA operator/(int val) const {
-        return BGRA{std::byte(static_cast<char>(b) / val),
-                    std::byte(static_cast<char>(g) / val),
-                    std::byte(static_cast<char>(r) / val),
-                    std::byte(static_cast<char>(a) / val)};
-    }
-    BGRA operator*(int val) const {
-        return BGRA{std::byte(static_cast<char>(b) * val),
-                    std::byte(static_cast<char>(g) * val),
-                    std::byte(static_cast<char>(r) * val),
-                    std::byte(static_cast<char>(a) * val)};
-    }
-    BGRA& operator+=(const BGRA& other) {
-        b = std::byte(static_cast<char>(b) + static_cast<char>(other.b));
-        g = std::byte(static_cast<char>(g) + static_cast<char>(other.g));
-        r = std::byte(static_cast<char>(r) + static_cast<char>(other.r));
-        a = std::byte(static_cast<char>(a) + static_cast<char>(other.a));
-        return *this;
-    }
-    BGRA& operator+=(int val) {
-        b = std::byte(static_cast<char>(b) + val);
-        g = std::byte(static_cast<char>(g) + val);
-        r = std::byte(static_cast<char>(r) + val);
-        a = std::byte(static_cast<char>(a) + val);
-        return *this;
-    }
-    BGRA& operator-=(const BGRA& other) {
-        b = std::byte(static_cast<char>(b) - static_cast<char>(other.b));
-        g = std::byte(static_cast<char>(g) - static_cast<char>(other.g));
-        r = std::byte(static_cast<char>(r) - static_cast<char>(other.r));
-        a = std::byte(static_cast<char>(a) - static_cast<char>(other.a));
-        return *this;
-    }
-    BGRA& operator-=(int val) {
-        b = std::byte(static_cast<char>(b) - val);
-        g = std::byte(static_cast<char>(g) - val);
-        r = std::byte(static_cast<char>(r) - val);
-        a = std::byte(static_cast<char>(a) - val);
-        return *this;
-    }
-    BGRA& operator/=(int val) {
-        b = std::byte(static_cast<char>(b) / val);
-        g = std::byte(static_cast<char>(g) / val);
-        r = std::byte(static_cast<char>(r) / val);
-        a = std::byte(static_cast<char>(a) / val);
-        return *this;
-    }
-    BGRA& operator*=(int val) {
-        b = std::byte(static_cast<char>(b) * val);
-        g = std::byte(static_cast<char>(g) * val);
-        r = std::byte(static_cast<char>(r) * val);
-        a = std::byte(static_cast<char>(a) * val);
-        return *this;
-    }
-    bool operator==(const BGRA& other) const {
-        return b == other.b && g == other.g && r == other.r && a == other.a;
-    }
-    bool operator!=(const BGRA& other) const {
-        return !(*this == other);
-    }
-    bool operator<(const BGRA& other) const {
-        return std::tie(b, g, r, a) <
-               std::tie(other.b, other.g, other.r, other.a);
-    }
+    uint8_t b, g, r, a;
 };
 
 struct RGBA {
-    std::byte r, g, b, a;
-    RGBA operator+(const RGBA& other) const {
-        return RGBA{
-            std::byte(static_cast<char>(r) + static_cast<char>(other.r)),
-            std::byte(static_cast<char>(g) + static_cast<char>(other.g)),
-            std::byte(static_cast<char>(b) + static_cast<char>(other.b)),
-            std::byte(static_cast<char>(a) + static_cast<char>(other.a))};
-    }
-    RGBA operator+(int val) const {
-        return RGBA{std::byte(static_cast<char>(r) + val),
-                    std::byte(static_cast<char>(g) + val),
-                    std::byte(static_cast<char>(b) + val),
-                    std::byte(static_cast<char>(a) + val)};
-    }
-    RGBA operator-(const RGBA& other) const {
-        return RGBA{
-            std::byte(static_cast<char>(r) - static_cast<char>(other.r)),
-            std::byte(static_cast<char>(g) - static_cast<char>(other.g)),
-            std::byte(static_cast<char>(b) - static_cast<char>(other.b)),
-            std::byte(static_cast<char>(a) - static_cast<char>(other.a))};
-    }
-    RGBA operator-(int val) {
-        return RGBA{std::byte(static_cast<char>(r) - val),
-                    std::byte(static_cast<char>(g) - val),
-                    std::byte(static_cast<char>(b) - val),
-                    std::byte(static_cast<char>(a) - val)};
-    }
-    RGBA operator/(int val) const {
-        return RGBA{std::byte(static_cast<char>(r) / val),
-                    std::byte(static_cast<char>(g) / val),
-                    std::byte(static_cast<char>(b) / val),
-                    std::byte(static_cast<char>(a) / val)};
-    }
-    RGBA operator*(int val) const {
-        return RGBA{std::byte(static_cast<char>(r) * val),
-                    std::byte(static_cast<char>(g) * val),
-                    std::byte(static_cast<char>(b) * val),
-                    std::byte(static_cast<char>(a) * val)};
-    }
-    RGBA& operator+=(const RGBA& other) {
-        r = std::byte(static_cast<char>(r) + static_cast<char>(other.r));
-        g = std::byte(static_cast<char>(g) + static_cast<char>(other.g));
-        b = std::byte(static_cast<char>(b) + static_cast<char>(other.b));
-        a = std::byte(static_cast<char>(a) + static_cast<char>(other.a));
-        return *this;
-    }
-    RGBA& operator+=(int val) {
-        r = std::byte(static_cast<char>(r) + val);
-        g = std::byte(static_cast<char>(g) + val);
-        b = std::byte(static_cast<char>(b) + val);
-        a = std::byte(static_cast<char>(a) + val);
-        return *this;
-    }
-    RGBA& operator-=(const RGBA& other) {
-        r = std::byte(static_cast<char>(r) - static_cast<char>(other.r));
-        g = std::byte(static_cast<char>(g) - static_cast<char>(other.g));
-        b = std::byte(static_cast<char>(b) - static_cast<char>(other.b));
-        a = std::byte(static_cast<char>(a) - static_cast<char>(other.a));
-        return *this;
-    }
-    RGBA& operator-=(int val) {
-        r = std::byte(static_cast<char>(r) - val);
-        g = std::byte(static_cast<char>(g) - val);
-        b = std::byte(static_cast<char>(b) - val);
-        a = std::byte(static_cast<char>(a) - val);
-        return *this;
-    }
-    RGBA& operator/=(int val) {
-        r = std::byte(static_cast<char>(r) / val);
-        g = std::byte(static_cast<char>(g) / val);
-        b = std::byte(static_cast<char>(b) / val);
-        a = std::byte(static_cast<char>(a) / val);
-        return *this;
-    }
-    RGBA& operator*=(int val) {
-        r = std::byte(static_cast<char>(r) * val);
-        g = std::byte(static_cast<char>(g) * val);
-        b = std::byte(static_cast<char>(b) * val);
-        a = std::byte(static_cast<char>(a) * val);
-        return *this;
-    }
-    bool operator==(const RGBA& other) const {
-        return r == other.r && g == other.g && b == other.b && a == other.a;
-    }
-    bool operator!=(const RGBA& other) const {
-        return !(*this == other);
-    }
-    bool operator<(const RGBA& other) const {
-        return std::tie(r, g, b, a) <
-               std::tie(other.r, other.g, other.b, other.a);
-    }
+    uint8_t r, g, b, a;
 };
-inline int abs(const BGR& color) {
-    return std::abs(std::to_integer<int>(color.b)) +
-           std::abs(std::to_integer<int>(color.g)) +
-           std::abs(std::to_integer<int>(color.r));
+
+struct YCbCr {
+    uint8_t y, cb, cr;
+};
+
+template <typename T>
+concept color_type =
+    std::same_as<T, colors::RGB> || std::same_as<T, colors::BGR> ||
+    std::same_as<T, colors::RGBA> || std::same_as<T, colors::BGRA> ||
+    std::same_as<T, colors::YCbCr>;
+
+template <color_type ColorType>
+int abs (const ColorType& color) {
+    if constexpr (sizeof(ColorType) == 4) {
+        auto [a, b, c, d] = color;
+        return std::abs(a) + std::abs(b) + std::abs(c) + std::abs(d);
+    } else {
+        auto [a, b, c] = color;
+        return std::abs(a) + std::abs(b) + std::abs(c);
+    }
 }
-inline int abs(const RGB& color) {
-    return std::abs(std::to_integer<int>(color.r)) +
-           std::abs(std::to_integer<int>(color.g)) +
-           std::abs(std::to_integer<int>(color.b));
+
+template <color_type ColorType>
+ColorType operator+(const ColorType& l, const ColorType& r) {
+    if constexpr (sizeof(ColorType) == 4) {
+        auto [a, b, c, d] = l;
+        auto [e, f, g, h] = r;
+        return {a + e, b + f, c + g, h + d};
+    } else {
+        auto [a, b, c] = l;
+        auto [e, f, g] = r;
+        return {a + e, b + f, c + g};
+    }
 }
-inline int abs(const BGRA& color) {
-    return std::abs(std::to_integer<int>(color.b)) +
-           std::abs(std::to_integer<int>(color.g)) +
-           std::abs(std::to_integer<int>(color.r)) +
-           std::abs(std::to_integer<int>(color.a));
+
+template <color_type ColorType>
+ColorType operator-(const ColorType& l, const ColorType& r) {
+    if constexpr (sizeof(ColorType) == 4) {
+        auto [a, b, c, d] = l;
+        auto [e, f, g, h] = r;
+        return {a - e, b - f, c - g, h - d};
+    } else {
+        auto [a, b, c] = l;
+        auto [e, f, g] = r;
+        return {a - e, b - f, c - g};
+    }
 }
-inline int abs(const RGBA& color) {
-    return std::abs(std::to_integer<int>(color.r)) +
-           std::abs(std::to_integer<int>(color.g)) +
-           std::abs(std::to_integer<int>(color.b)) +
-           std::abs(std::to_integer<int>(color.a));
+
+template <color_type ColorType>
+ColorType operator*(const ColorType& l, const ColorType& r) {
+    if constexpr (sizeof(ColorType) == 4) {
+        auto [a, b, c, d] = l;
+        auto [e, f, g, h] = r;
+        return {a * e, b * f, c * g, h * d};
+    } else {
+        auto [a, b, c] = l;
+        auto [e, f, g] = r;
+        return {a * e, b * f, c * g};
+    }
 }
+
+template <color_type ColorType>
+ColorType operator/(const ColorType& l, const ColorType& r) {
+    if constexpr (sizeof(ColorType) == 4) {
+        auto [a, b, c, d] = l;
+        auto [e, f, g, h] = r;
+        return {a / e, b / f, c / g, h / d};
+    } else {
+        auto [a, b, c] = l;
+        auto [e, f, g] = r;
+        return {a / e, b / f, c / g};
+    }
+}
+
 }  // namespace f9ay::colors
 
-template <typename Char_T>
-struct std::formatter<f9ay::colors::BGR, Char_T>
+template <f9ay::colors::color_type ColorType, typename Char_T>
+struct std::formatter<ColorType, Char_T>
     : std::formatter<std::string, Char_T> {
-    auto format(const f9ay::colors::BGR& color, auto& ctx) const {
-        return std::format_to(
-            ctx.out(), "({}, {}, {})", std::to_integer<int>(color.b),
-            std::to_integer<int>(color.g), std::to_integer<int>(color.r));
-    }
-};
-template <typename Char_T>
-struct std::formatter<f9ay::colors::RGB, Char_T>
-    : std::formatter<std::string, Char_T> {
-    auto format(const f9ay::colors::RGB& color, auto& ctx) const {
-        return std::format_to(
-            ctx.out(), "({}, {}, {})", std::to_integer<int>(color.r),
-            std::to_integer<int>(color.g), std::to_integer<int>(color.b));
-    }
-};
-template <typename Char_T>
-struct std::formatter<f9ay::colors::BGRA, Char_T>
-    : std::formatter<std::string, Char_T> {
-    auto format(const f9ay::colors::BGRA& color, auto& ctx) const {
-        return std::format_to(
-            ctx.out(), "({}, {}, {}, {})", std::to_integer<int>(color.b),
-            std::to_integer<int>(color.g), std::to_integer<int>(color.r),
-            std::to_integer<int>(color.a));
-    }
-};
-template <typename Char_T>
-struct std::formatter<f9ay::colors::RGBA, Char_T>
-    : std::formatter<std::string, Char_T> {
-    auto format(const f9ay::colors::RGBA& color, auto& ctx) const {
-        return std::format_to(
-            ctx.out(), "({}, {}, {}, {})", std::to_integer<int>(color.r),
-            std::to_integer<int>(color.g), std::to_integer<int>(color.b),
-            std::to_integer<int>(color.a));
+    auto format(const ColorType& color, auto& ctx) const {
+        if constexpr (sizeof(ColorType) == 4) {
+            auto [a, b, c, d] = color;
+            return std::format_to(
+                ctx.out(), "({}, {}, {}, {})", a, b, c, d);
+
+        } else {
+            auto [a, b, c] = color;
+            return std::format_to(
+                ctx.out(), "({}, {}, {})", a, b, c);
+        }
     }
 };
 
-namespace std {
-template <>
-struct hash<f9ay::colors::BGR> {
-    std::size_t operator()(const f9ay::colors::BGR& color) const {
-        return std::hash<std::byte>()(color.b) ^
-               std::hash<std::byte>()(color.g) ^
-               std::hash<std::byte>()(color.r);
+
+template <f9ay::colors::color_type ColorType>
+struct std::hash<ColorType> {
+    std::size_t operator()(const ColorType& color) const {
+        if constexpr (sizeof(ColorType) == 4) {
+            return std::hash<uint32_t>()(std::bit_cast<uint32_t>(color));
+        } else {
+            auto [a, b, c] = color;
+            uint32_t val = a << 16 | b << 8 | c;
+            return std::hash<uint32_t>()(val);
+        }
     }
 };
 
-template <>
-struct hash<f9ay::colors::RGB> {
-    std::size_t operator()(const f9ay::colors::RGB& color) const {
-        return std::hash<std::byte>()(color.r) ^
-               std::hash<std::byte>()(color.g) ^
-               std::hash<std::byte>()(color.b);
-    }
-};
-
-template <>
-struct hash<f9ay::colors::BGRA> {
-    std::size_t operator()(const f9ay::colors::BGRA& color) const {
-        return std::hash<std::byte>()(color.b) ^
-               std::hash<std::byte>()(color.g) ^
-               std::hash<std::byte>()(color.r) ^
-               std::hash<std::byte>()(color.a);
-    }
-};
-
-template <>
-struct hash<f9ay::colors::RGBA> {
-    std::size_t operator()(const f9ay::colors::RGBA& color) const {
-        return std::hash<std::byte>()(color.r) ^
-               std::hash<std::byte>()(color.g) ^
-               std::hash<std::byte>()(color.b) ^
-               std::hash<std::byte>()(color.a);
-    }
-};
-
-}  // namespace std

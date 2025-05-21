@@ -193,12 +193,12 @@ private:
         // DFS
         if (node->left) {
             encodedData.push_back(std::byte{0});
-            _getCodeRecursively(node->left, element, freq, encodedData);
+            _getCodeRecursively(node->left, element, encodedData);
             encodedData.pop_back();
         }
         if (node->right) {
             encodedData.push_back(std::byte{1});
-            _getCodeRecursively(node->right, element, freq, encodedData);
+            _getCodeRecursively(node->right, element, encodedData);
         }
 
         // if left is not leaf node and right is not leaf node

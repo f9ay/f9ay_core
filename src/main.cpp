@@ -150,13 +150,16 @@ int main(int argc, char** argv) {
     std::ofstream out(path.parent_path() / "fire_converted.bmp",
                       std::ios::binary);
 
-    std::string test = "aacaacabcabaaac";
+    std::string test = "AAAAAAAAAAAAAAAAAAAA";
 
     auto vec = LZ77::lz77Encode(test);
     for (auto [offset, length, value] : vec) {
         std::cout << "Offset: " << offset << ", Length: " << length
                   << ", Value: " << (value.has_value() ? *value : ' ') << "\n";
     }
+
+    auto decoded = LZ77::lz77decode<std::string>(vec);
+    std::cout << "Decoded: " << decoded << "\n";
 
     std::cout << "done" << std::endl;
 

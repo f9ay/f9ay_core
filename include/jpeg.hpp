@@ -11,6 +11,7 @@
 #include "matrix.hpp"
 #include "matrix_concept.hpp"
 #include "matrix_view.hpp"
+#include "util.hpp"
 
 namespace f9ay {
 class Jpeg {
@@ -63,9 +64,9 @@ public:
         Matrix<colors::YCbCr> ycbcr = toYCbCr(src);
         // 分離有助於 cache
         // TODO Downsampling
-        Matrix<uint8_t> Y(src.col(), src.row());
-        Matrix<uint8_t> Cb(src.col() / 2, src.row() / 2);
-        Matrix<uint8_t> Cr(src.col() / 2, src.row() / 2);
+        Matrix<uint8_t> Y(src.row(), src.col());
+        Matrix<uint8_t> Cb(src.row(), src.col());
+        Matrix<uint8_t> Cr(src.row(), src.col());
 #pragma loop(hint_parallel(0))
         for (int i = 0; i < src.row(); i++) {
             for (int j = 0; j < src.col(); j++) {
@@ -74,42 +75,33 @@ public:
                 Cr[i, j] = ycbcr[i, j].cr;
             }
         }
-        auto view_y = Matrix_view(Y);
-        auto view_cb = Matrix_view(Cb);
-        auto view_cr = Matrix_view(Cr);
 
-        auto split_y = split<8>(view_y);
-        auto split_cb = split<8>(view_cb);
-        auto split_cr = split<8>(view_cr);
-
-        // TODO check inline or not
-        auto sub_128 = [](const uint8_t x) {
-            return static_cast<uint8_t>(std::bit_cast<int8_t>(x) -
-                                        static_cast<int8_t>(128));
-        };
+        auto split_y = split<8>(Y);
+        auto split_cb = split<8>(Cb);
+        auto split_cr = split<8>(Cr);
 
         for (const auto m_ptr : {&split_y, &split_cb, &split_cr}) {
             auto &m = *m_ptr;
 
             // TODO 用表達式模板優化
-            m.transform(sub_128)
-                .transform(Dct<8>::dct<int8_t, uint8_t>)
-                .transform([](Matrix<uint8_t> &block) -> decltype(auto) {
-                    block.round_div(Quantization_Matrix);
-                    return block;
-                })
-                .for_each([](const Matrix<uint8_t> &block) {
-                    if (block.row() != block.col()) [[unlikely]] {
-                        // just for check
-                        // impossible
-                        throw std::logic_error("size match");
-                    }
-                    for (auto [i, j] : zigzag(block.row())) {
-                        ///////////////////////////
-                        /// 給出一個陣列
-                        //////////////////////////
-                    }
-                });
+            auto before_zigzag =
+                m.transform([](Matrix<uint8_t> &block) {
+                     block.transform([](uint8_t &x) { x -= 128; });
+                 })
+                    .transform(Dct<8>::dct<uint8_t>)
+                    .transform([](Matrix<uint8_t> &block) {
+                        block.round_div(Quantization_Matrix);
+                    })
+                    .trans_convert([](const Matrix<uint8_t> &block) {
+                        // zig zag 排列
+                        std::array<uint8_t, 8 * 8> block_uint8;
+                        int index = 0;
+                        for (auto [i, j] : zigzag<8>()) {
+                            block_uint8[index++] = block[i, j];
+                        }
+                        return block_uint8;
+                    });
+            before_zigzag.dump();
         }
 
         // auto &dct_y =
@@ -156,10 +148,9 @@ private:
     }
 
     template <int N, int M = N>
-    static Matrix<Matrix<uint8_t>> split(
-        Matrix_view<View_Type::origin, uint8_t, 0> mtx) {
-        const int row_sz = mtx.row() / N + mtx.row() % N != 0;
-        const int col_sz = mtx.col() / M + mtx.col() % M != 0;
+    static Matrix<Matrix<uint8_t>> split(Matrix<uint8_t> &mtx) {
+        const int row_sz = mtx.row() / N + (mtx.row() % N != 0);
+        const int col_sz = mtx.col() / M + (mtx.col() % M != 0);
         Matrix<Matrix<uint8_t>> result(row_sz, col_sz);
         for (int i = 0; i < row_sz; i++) {
             for (int j = 0; j < col_sz; j++) {
@@ -169,7 +160,7 @@ private:
                         // 希望編譯器會優化
                         if (i * N + k >= mtx.row() || j * M + l >= mtx.col())
                             [[unlikely]] {
-                            block[k, l] = 0;  // TODO 鮮甜橙 0 後面再改
+                            block[k, l] = 128;  // TODO 先填 128 後面再改
                         } else {
                             block[k, l] = mtx[i * N + k, j * M + l];
                         }
@@ -181,22 +172,60 @@ private:
         return result;
     }
 
-    static constexpr auto zigzag(const int n) {
-        std::vector<std::pair<int, int>> res(n * n);
+    template <int n>
+    static consteval auto zigzag() {
+        std::array<std::pair<int, int>, n * n> res;
         int index = 0;
-        for (int line = 0; line < 2 * n; line++) {
+        int row = 0, col = 0;
+        for (int len = 1; len <= n; len++) {
+            for (int i = 0; i < len - 1; i++) {
+                res[index++] = {row, col};
+                if (len % 2 == 0) {
+                    row++;
+                    col--;
+                } else {
+                    col++;
+                    row--;
+                }
+            }
+            res[index++] = {row, col};
+            if (len % 2 == 0) {
+                row++;
+            } else {
+                col++;
+            }
+        }
+        row = n - 1;
+        col = 1;
+        for (int len = n - 1; len >= 1; --len) {
+            for (int i = 0; i < len - 1; i++) {
+                res[index++] = {row, col};
+                if (len % 2 == 0) {
+                    row++;
+                    col--;
+                } else {
+                    col++;
+                    row--;
+                }
+            }
+            res[index++] = {row, col};
+            if (len % 2 != 0) {
+                row++;
+            } else {
+                col++;
+            }
         }
         return res;
     }
 
-    static constexpr Matrix<uint8_t> Quantization_Matrix = {
-        {16, 11, 10, 16, 24, 40, 51, 61},
-        {12, 12, 14, 19, 26, 58, 60, 55},
-        {14, 13, 16, 24, 40, 57, 69, 56},
-        {14, 17, 22, 29, 51, 87, 80, 62},
-        {18, 22, 37, 56, 68, 109, 103, 77},
-        {24, 35, 55, 64, 81, 104, 113, 92},
-        {49, 64, 78, 87, 103, 121, 120, 101},
-        {72, 92, 95, 98, 112, 100, 103, 99}};
+    constexpr static std::array<std::array<uint8_t, 8>, 8> Quantization_Matrix =
+        {std::array<uint8_t, 8>{16, 11, 10, 16, 24, 40, 51, 61},
+         {12, 12, 14, 19, 26, 58, 60, 55},
+         {14, 13, 16, 24, 40, 57, 69, 56},
+         {14, 17, 22, 29, 51, 87, 80, 62},
+         {18, 22, 37, 56, 68, 109, 103, 77},
+         {24, 35, 55, 64, 81, 104, 113, 92},
+         {49, 64, 78, 87, 103, 121, 120, 101},
+         {72, 92, 95, 98, 112, 100, 103, 99}};
 };
 }  // namespace f9ay

@@ -5,6 +5,7 @@
 #include <iostream>
 #include <mdspan>
 #include <span>
+#include <utility>
 
 namespace f9ay {
 template <typename T>
@@ -178,27 +179,27 @@ public:
 #pragma loop(hint_parallel(0))
         for (int i = 0; i < row(); i++) {
             for (int j = 0; j < col(); j++) {
-                data[i, j] = std::move(func(data[i, j]));
+                func(self()[i, j]);
             }
         }
         return *this;
     }
 
     template <typename Func>
-    decltype(auto) for_each(Func &&func) {
+    auto trans_convert(Func &&func)
+        -> Matrix<decltype(func(std::declval<T>()))> {
+        Matrix<decltype(func(self()[0, 0]))> result(row(), col());
 #pragma loop(hint_parallel(0))
         for (int i = 0; i < row(); i++) {
             for (int j = 0; j < col(); j++) {
-                func(data[i, j]);
+                result[i, j] = func(self()[i, j]);
             }
         }
-        return *this;
+        return result;
     }
 
-    decltype(auto) round_div(const Matrix &other) {
-        if (row() != other.row() || col() != other.col()) [[unlikely]] {
-            throw std::invalid_argument("Matrix size does not match");
-        }
+    template <typename U>
+    decltype(auto) round_div(const U &other) {
 #pragma loop(hint_parallel(0))
         for (int i = 0; i < row(); i++) {
             for (int j = 0; j < col(); j++) {
@@ -215,6 +216,17 @@ public:
                 }
             }
         }
+        return *this;
+    }
+
+    decltype(auto) dump() {
+        println("{}", *this);
+        return *this;
+    }
+
+    decltype(auto) dump_abort() {
+        std::println("{}", *this);
+        abort();
         return *this;
     }
 
@@ -235,7 +247,8 @@ public:
         }
         if (data != nullptr) {
             std::println(
-                "warnning matrix 的移動建構子 賦值給不是 lateinit 的 matrix");
+                "warnning matrix 的移動 operator= 賦值給不是 lateinit 的 "
+                "matrix");
             delete[] data;
         }
         data = other.data;
@@ -246,7 +259,21 @@ public:
         other.cols = 0;
         return *this;
     }
-    Matrix &operator=(const Matrix &) = delete;
+    Matrix &operator=(const Matrix &other) {
+        if (this == &other) {
+            return *this;
+        }
+        if (data != nullptr) {
+            std::println(
+                "warnning matrix 的複製 operator= 賦值給不是 lateinit 的 "
+                "matrix");
+            delete[] data;
+        }
+        rows = other.rows;
+        cols = other.cols;
+        std::copy(other.data, other.data + other.rows * other.cols, data);
+        return *this;
+    }
     Matrix(Matrix &&other) noexcept
         : data(other.data), rows(other.rows), cols(other.cols) {
         if (this == &other) {
@@ -271,6 +298,12 @@ public:
     }
     auto span() const {
         return std::mdspan(data, rows, cols);
+    }
+
+    void swap(Matrix &other) noexcept {
+        std::swap(data, other.data);
+        std::swap(rows, other.rows);
+        std::swap(cols, other.cols);
     }
     /*
         {{1, 2, 3},
@@ -308,6 +341,10 @@ public:
 private:
     T *data = nullptr;
     int rows, cols;
+
+    decltype(auto) self() {
+        return *this;
+    }
 };
 
 inline std::ostream &operator<<(std::ostream &os, const Matrix<int> &matrix) {
@@ -327,12 +364,18 @@ struct std::formatter<f9ay::Matrix<T>, Char_T>
     : std::formatter<std::string, Char_T> {
     auto format(const f9ay::Matrix<T> &matrix, auto &ctx) const {
         auto out = ctx.out();
+        out = std::format_to(out,
+                             "================================================="
+                             "===============================\n");
         for (int i = 0; i < matrix.row(); i++) {
             for (int j = 0; j < matrix.col(); j++) {
                 out = std::format_to(out, "{} ", matrix[i][j]);
             }
             out = std::format_to(out, "\n");
         }
+        out = std::format_to(out,
+                             "================================================="
+                             "===============================\n");
         return out;
     }
 };

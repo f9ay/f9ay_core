@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "dct.hpp"
+#include "huffman_coding.hpp"
 #include "importer.hpp"
 #include "matrix.hpp"
 #include "matrix_concept.hpp"
@@ -41,10 +42,8 @@ public:
     static Midway import(const std::byte *source) {
         const auto *jfif_app0 = safeMemberAssign<JFIF_APP0>(source);
         std::pair<const std::byte *, size_t> thumbnail_data = {
-            source + sizeof(JFIF_APP0),
-            3 * jfif_app0->Xthumbnail * jfif_app0->Ythumbnail};
-        const std::byte *it = source + sizeof(JFIF_APP0) +
-                              3 * jfif_app0->Xthumbnail * jfif_app0->Ythumbnail;
+            source + sizeof(JFIF_APP0), 3 * jfif_app0->Xthumbnail * jfif_app0->Ythumbnail};
+        const std::byte *it = source + sizeof(JFIF_APP0) + 3 * jfif_app0->Xthumbnail * jfif_app0->Ythumbnail;
         if (jfif_app0->version >= 0x0102) {
             // jfif extension app0 available
             throw std::logic_error("JFIF version does not match");
@@ -59,8 +58,7 @@ public:
         return {};
     }
 
-    static std::pair<std::unique_ptr<std::byte[]>, size_t> write(
-        const Matrix<colors::RGB> &src) {
+    static std::pair<std::unique_ptr<std::byte[]>, size_t> write(const Matrix<colors::RGB> &src) {
         Matrix<colors::YCbCr> ycbcr = toYCbCr(src);
         // 分離有助於 cache
         // TODO Downsampling
@@ -84,43 +82,81 @@ public:
             auto &m = *m_ptr;
 
             // TODO 用表達式模板優化
-            auto before_zigzag =
+            auto zigzaged =
+                /* clang-format off */
                 m.transform([](Matrix<uint8_t> &block) {
-                     block.transform([](uint8_t &x) { x -= 128; });
-                 })
-                    .transform(Dct<8>::dct<uint8_t>)
-                    .transform([](Matrix<uint8_t> &block) {
-                        block.round_div(Quantization_Matrix);
-                    })
-                    .trans_convert([](const Matrix<uint8_t> &block) {
-                        // zig zag 排列
-                        std::array<uint8_t, 8 * 8> block_uint8;
-                        int index = 0;
-                        for (auto [i, j] : zigzag<8>()) {
-                            block_uint8[index++] = block[i, j];
-                        }
-                        return block_uint8;
+                    block.transform([](uint8_t &x) {
+                        x -= 128;
                     });
-            before_zigzag.dump();
+                })
+                .trans_convert(Dct<8>::dct<uint8_t, int16_t>)
+                .trans_convert([](Matrix<int16_t> &block) {
+                    auto vec = block.flattenToSpan()
+                            | std::views::transform([](int16_t x) {return static_cast<uint8_t>(x);})
+                            | std::ranges::to<std::vector>();
+                    return Matrix<uint8_t>(std::move(vec), block.row(), block.col());
+                })
+                .trans_convert([](const Matrix<uint8_t> &block) {
+                    // zig zag 排列
+                    std::array<uint8_t, 8 * 8> block_uint8;
+                    int index = 0;
+                    for (auto &[i, j] : zigzag<8>()) {
+                        block_uint8[index++] = block[i, j];
+                    }
+                    return block_uint8;
+                });
+            /* clang-format on */
+            std::vector<int8_t> dc(zigzaged.row() * zigzaged.col());
+            int index = 0;
+            for (auto &x : zigzaged.flattenToSpan()) {
+                // dc 使用 差分
+                if (index != 0) {
+                    dc[index + 1] = x[0] - dc[index];  // de[index] + dx[index + 1] = x[0]
+                    index++;
+                } else {
+                    dc[index++] = x[0];
+                }
+            }
+
+            auto ac = zigzaged.trans_convert([](const std::array<uint8_t, 8 * 8> &arr) {
+                // run length encoding
+                std::vector<std::pair<int8_t, int8_t>> rle;
+                int last_non_zero = 0;
+                for (int i = arr.size() - 1; i >= 0; i--) {
+                    if (arr[i] != 0) {
+                        last_non_zero = i;
+                        break;
+                    }
+                }
+                int cnt = 0;
+                // 從 1 開始 因為 dc 不編碼
+                for (int i = 1; i <= last_non_zero; i++) {
+                    if (arr[i] != 0 || cnt == 15) {
+                        rle.emplace_back(cnt, arr[i]);
+                        cnt = 0;
+                    } else {  // cnt < 15 and arr[i] == 0
+                        cnt++;
+                    }
+                }
+                rle.push_back({-1, 0});  // EOB -- end of block
+                return rle;
+            });
+
+            /* channel Y => 2 huffman table dc and ac */
+            /* Cb Cr => 各 1 huffman table */
+            /* clang-format off */
+            auto ac_merged = ac.flattenToSpan()
+                | std::views::join
+                | std::ranges::to<std::vector>();
+            /* clang-format on */
+
+            if (m_ptr == &split_y) {
+                HuffmanCoding<int8_t> dc_huffman;
+                dc_huffman.buildTree(dc);
+                HuffmanCoding<int8_t> ac_huffman;
+                ac_huffman(ac_merged);
+            }
         }
-
-        // auto &dct_y =
-        // split_y.transform(sub_128).transform(Dct<8>::dct<int8_t>); auto
-        // &dct_cb =
-        //     split_cb.transform(sub_128).transform(Dct<8>::dct<int8_t>);
-        // auto &dct_cr =
-        //     split_cr.transform(sub_128).transform(Dct<8>::dct<int8_t>);
-
-        //         // Downsampling to  4:2:0
-        //         Matrix<uint8_t> Cb(src.col() / 2, src.row() / 2);
-        //         Matrix<uint8_t> Cr(src.col() / 2, src.row() / 2);
-        // #pragma loop(hint_parallel(0))
-        //         for (int i = 0; i < Cb.row(); i++) {
-        //             for (int j = 0; j < Cb.col(); j++) {
-        //                 Cb[i, j] = ycbcr[i * 2, j * 2].cb;
-        //                 Cr[i, j] = ycbcr[i * 2 + 1, j * 2].cr;
-        //             }
-        //         }
 
         return {nullptr, 0};
     }
@@ -133,15 +169,9 @@ private:
         for (int i = 0; i < src.row(); i++) {
             for (int j = 0; j < src.col(); j++) {
                 result[i, j] = {
-                    static_cast<uint8_t>(0.299f * src[i, j].r +
-                                         0.587f * src[i, j].g +
-                                         0.114f * src[i, j].b),
-                    static_cast<uint8_t>(-0.168736f * src[i, j].r -
-                                         0.331364f * src[i, j].g +
-                                         0.5f * src[i, j].b + 128),
-                    static_cast<uint8_t>(0.5f * src[i, j].r -
-                                         0.418688f * src[i, j].g -
-                                         0.081312f * src[i, j].b + 128)};
+                    static_cast<uint8_t>(0.299f * src[i, j].r + 0.587f * src[i, j].g + 0.114f * src[i, j].b),
+                    static_cast<uint8_t>(-0.168736f * src[i, j].r - 0.331364f * src[i, j].g + 0.5f * src[i, j].b + 128),
+                    static_cast<uint8_t>(0.5f * src[i, j].r - 0.418688f * src[i, j].g - 0.081312f * src[i, j].b + 128)};
             }
         }
         return result;
@@ -158,8 +188,7 @@ private:
                 for (int k = 0; k < N; k++) {
                     for (int l = 0; l < M; l++) {
                         // 希望編譯器會優化
-                        if (i * N + k >= mtx.row() || j * M + l >= mtx.col())
-                            [[unlikely]] {
+                        if (i * N + k >= mtx.row() || j * M + l >= mtx.col()) [[unlikely]] {
                             block[k, l] = 128;  // TODO 先填 128 後面再改
                         } else {
                             block[k, l] = mtx[i * N + k, j * M + l];
@@ -218,14 +247,14 @@ private:
         return res;
     }
 
-    constexpr static std::array<std::array<uint8_t, 8>, 8> Quantization_Matrix =
-        {std::array<uint8_t, 8>{16, 11, 10, 16, 24, 40, 51, 61},
-         {12, 12, 14, 19, 26, 58, 60, 55},
-         {14, 13, 16, 24, 40, 57, 69, 56},
-         {14, 17, 22, 29, 51, 87, 80, 62},
-         {18, 22, 37, 56, 68, 109, 103, 77},
-         {24, 35, 55, 64, 81, 104, 113, 92},
-         {49, 64, 78, 87, 103, 121, 120, 101},
-         {72, 92, 95, 98, 112, 100, 103, 99}};
+    constexpr static std::array<std::array<uint8_t, 8>, 8> Quantization_Matrix = {
+        std::array<uint8_t, 8>{16, 11, 10, 16, 24, 40, 51, 61},
+        {12, 12, 14, 19, 26, 58, 60, 55},
+        {14, 13, 16, 24, 40, 57, 69, 56},
+        {14, 17, 22, 29, 51, 87, 80, 62},
+        {18, 22, 37, 56, 68, 109, 103, 77},
+        {24, 35, 55, 64, 81, 104, 113, 92},
+        {49, 64, 78, 87, 103, 121, 120, 101},
+        {72, 92, 95, 98, 112, 100, 103, 99}};
 };
 }  // namespace f9ay

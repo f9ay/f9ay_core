@@ -35,19 +35,18 @@ enum class WriteSequence {
     MSB,
     LSB,
 };
+
 class BitWriter {
 public:
     BitWriter() {
         _buffer.push_back(std::byte{0});
     }
 
-    BitWriter(const std::vector<std::byte>& buffer)
-        : _buffer(buffer), _bitPos(0) {
+    BitWriter(const std::vector<std::byte>& buffer) : _buffer(buffer), _bitPos(0) {
         _buffer.push_back(std::byte{0});
     }
 
-    BitWriter(std::byte* buffer, size_t size)
-        : _buffer(buffer, buffer + size), _bitPos(0) {
+    BitWriter(std::byte* buffer, size_t size) : _buffer(buffer, buffer + size), _bitPos(0) {
         _buffer.push_back(std::byte{0});
     }
 
@@ -85,8 +84,7 @@ public:
             if (_bitPos % 8 != 0 && needRevert) {
                 // revert the last byte
                 _buffer.back() = revertByteBits(_buffer.back());
-            } else if(_bitPos % 8 != 0 && !needRevert) {
-                
+            } else if (_bitPos % 8 != 0 && !needRevert) {
             }
         }
         _writeSequence = sequence;

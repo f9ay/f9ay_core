@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <cstddef>
 #include <cstdint>
@@ -59,7 +59,20 @@ public:
     }
 
     static std::pair<std::unique_ptr<std::byte[]>, size_t> write(const Matrix<colors::RGB> &src) {
-        Matrix<colors::YCbCr> ycbcr = toYCbCr(src);
+        auto [y_dc, y_ac, uv_dc, uv_ac, dcs, acs] = encode(src);
+
+        return {nullptr, 0};
+    }
+
+private:
+    static auto encode(const Matrix<colors::RGB> &src) {
+        auto yuv = src.trans_convert([](const colors::RGB &color) -> colors::YCbCr {
+            const auto &[r, g, b] = color;
+            return colors::YCbCr{
+                static_cast<uint8_t>(0.299f * r + 0.587f * g + 0.114f * b),
+                static_cast<uint8_t>(-0.168736f * r - 0.331364f * g + 0.5f * b + 128),
+                static_cast<uint8_t>(0.5f * r - 0.418688f * g - 0.081312f * b + 128)};
+        });
         // 分離有助於 cache
         // TODO Downsampling
         Matrix<uint8_t> Y(src.row(), src.col());
@@ -68,9 +81,9 @@ public:
 #pragma loop(hint_parallel(0))
         for (int i = 0; i < src.row(); i++) {
             for (int j = 0; j < src.col(); j++) {
-                Y[i, j] = ycbcr[i, j].y;
-                Cb[i, j] = ycbcr[i, j].cb;
-                Cr[i, j] = ycbcr[i, j].cr;
+                Y[i, j] = yuv[i, j].y;
+                Cb[i, j] = yuv[i, j].cb;
+                Cr[i, j] = yuv[i, j].cr;
             }
         }
 
@@ -78,6 +91,12 @@ public:
         auto split_cb = split<8>(Cb);
         auto split_cr = split<8>(Cr);
 
+        // std::vector<HuffmanCoding<int8_t>> result_huffman(4);  // y_dc y_ac cb cr
+        HuffmanCoding<int8_t> y_dc, y_ac, uv_dc, uv_ac;
+        std::vector<std::vector<int8_t>> dcs;
+        dcs.reserve(3);
+        std::vector<Matrix<std::vector<std::pair<signed char, unsigned char>>>> acs;
+        acs.reserve(3);
         for (const auto m_ptr : {&split_y, &split_cb, &split_cr}) {
             auto &m = *m_ptr;
 
@@ -90,15 +109,10 @@ public:
                     });
                 })
                 .trans_convert(Dct<8>::dct<uint8_t, int16_t>)
-                .trans_convert([](Matrix<int16_t> &block) {
-                    auto vec = block.flattenToSpan()
-                            | std::views::transform([](int16_t x) {return static_cast<uint8_t>(x);})
-                            | std::ranges::to<std::vector>();
-                    return Matrix<uint8_t>(std::move(vec), block.row(), block.col());
-                })
-                .trans_convert([](const Matrix<uint8_t> &block) {
+                .trans_convert([](const Matrix<int16_t> &block) {
                     // zig zag 排列
-                    std::array<uint8_t, 8 * 8> block_uint8;
+                    // 忽略 uninitialize error 因為每個 index 都會填東西
+                    std::array<int8_t, 8 * 8> block_uint8; // NOLINT(*-pro-type-member-init)
                     int index = 0;
                     for (auto &[i, j] : zigzag<8>()) {
                         block_uint8[index++] = block[i, j];
@@ -106,21 +120,21 @@ public:
                     return block_uint8;
                 });
             /* clang-format on */
-            std::vector<int8_t> dc(zigzaged.row() * zigzaged.col());
+            std::vector<int8_t> dc(zigzaged.flattenToSpan().size());
             int index = 0;
             for (auto &x : zigzaged.flattenToSpan()) {
                 // dc 使用 差分
                 if (index != 0) {
-                    dc[index + 1] = x[0] - dc[index];  // de[index] + dx[index + 1] = x[0]
+                    dc[index] = x[0] - dc[index - 1];  // de[index - 1] + dx[index] = x[0]
                     index++;
                 } else {
                     dc[index++] = x[0];
                 }
             }
 
-            auto ac = zigzaged.trans_convert([](const std::array<uint8_t, 8 * 8> &arr) {
+            auto ac = zigzaged.trans_convert([](const std::array<int8_t, 8 * 8> &arr) {
                 // run length encoding
-                std::vector<std::pair<int8_t, int8_t>> rle;
+                std::vector<std::pair<int8_t, uint8_t>> rle;
                 int last_non_zero = 0;
                 for (int i = arr.size() - 1; i >= 0; i--) {
                     if (arr[i] != 0) {
@@ -132,51 +146,53 @@ public:
                 // 從 1 開始 因為 dc 不編碼
                 for (int i = 1; i <= last_non_zero; i++) {
                     if (arr[i] != 0 || cnt == 15) {
-                        rle.emplace_back(cnt, arr[i]);
+                        // [run_len, size_for_bit], amp
+                        if (arr[i] == 0) {
+                            rle.emplace_back(static_cast<signed char>(0xF0), 0);
+                        } else {
+                            const int8_t size_for_bit = calculate_binary_size(abs_int8(arr[i]));
+                            rle.emplace_back(
+                                static_cast<int8_t>(cnt << 8 | size_for_bit), to_amplitude(arr[i], size_for_bit));
+                        }
                         cnt = 0;
                     } else {  // cnt < 15 and arr[i] == 0
                         cnt++;
                     }
                 }
-                rle.push_back({-1, 0});  // EOB -- end of block
+                rle.emplace_back(static_cast<int8_t>(0x00), 0);  // EOB -- end of block
                 return rle;
             });
 
-            /* channel Y => 2 huffman table dc and ac */
-            /* Cb Cr => 各 1 huffman table */
+            // TODO 這裡之後可以優化到 計算RLE的地方
             /* clang-format off */
             auto ac_merged = ac.flattenToSpan()
                 | std::views::join
-                | std::ranges::to<std::vector>();
+                | std::views::transform([](const std::pair<int8_t, int8_t> &rle_pair) {
+                        return rle_pair.first;
+                    });
             /* clang-format on */
 
             if (m_ptr == &split_y) {
-                HuffmanCoding<int8_t> dc_huffman;
-                dc_huffman.buildTree(dc);
+                y_dc.add(dc).build();
                 HuffmanCoding<int8_t> ac_huffman;
-                ac_huffman(ac_merged);
+                y_ac.add(ac_merged | std::ranges::to<std::vector>()).build();
+            } else {
+                // dc merge ac
+                uv_dc.add(dc).build();
+
+                uv_ac.add(ac_merged | std::ranges::to<std::vector>());
             }
+            dcs.emplace_back(std::move(dc));
+            acs.emplace_back(std::move(ac));
         }
 
-        return {nullptr, 0};
+        uv_ac.build();
+
+        return std::tuple{
+            std::move(y_dc), std::move(y_ac), std::move(uv_dc), std::move(uv_ac), std::move(dcs), std::move(acs)};
     }
 
 private:
-    static Matrix<colors::YCbCr> toYCbCr(const Matrix<colors::RGB> &src) {
-        Matrix<colors::YCbCr> result(src.row(), src.col());
-// 自動向量化
-#pragma loop(hint_parallel(0))
-        for (int i = 0; i < src.row(); i++) {
-            for (int j = 0; j < src.col(); j++) {
-                result[i, j] = {
-                    static_cast<uint8_t>(0.299f * src[i, j].r + 0.587f * src[i, j].g + 0.114f * src[i, j].b),
-                    static_cast<uint8_t>(-0.168736f * src[i, j].r - 0.331364f * src[i, j].g + 0.5f * src[i, j].b + 128),
-                    static_cast<uint8_t>(0.5f * src[i, j].r - 0.418688f * src[i, j].g - 0.081312f * src[i, j].b + 128)};
-            }
-        }
-        return result;
-    }
-
     template <int N, int M = N>
     static Matrix<Matrix<uint8_t>> split(Matrix<uint8_t> &mtx) {
         const int row_sz = mtx.row() / N + (mtx.row() % N != 0);
@@ -199,6 +215,28 @@ private:
             }
         }
         return result;
+    }
+
+    constexpr static int8_t abs_int8(int8_t x) {
+        if (x < 0) return -x;
+        return x;
+    }
+
+    static int8_t calculate_binary_size(int8_t x) {
+        [[assume(x > 0)]];
+#ifdef _MSC_VER
+        // lzcnt return leading zero => 0000 0000 1000 0000  return 8
+        return static_cast<int8_t>(16 - __lzcnt16(x));
+#else
+        return 32 - __builtin_clz(x);
+#endif
+    }
+
+    constexpr static int8_t to_amplitude(int8_t val, int8_t size) {
+        if (val > 0) {
+            return val;
+        }
+        return (1 << size) - 1 - abs_int8(val);
     }
 
     template <int n>

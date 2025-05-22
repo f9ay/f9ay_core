@@ -14,7 +14,7 @@ class Dct {
 
 public:
     template <typename IN, typename OUT>
-    static auto dct(Matrix<IN> &matrix) {
+    static auto dct(const Matrix<IN> &matrix) {
         if (matrix.row() != N || matrix.col() != M) {
             throw std::invalid_argument("matrix size not match");
         }

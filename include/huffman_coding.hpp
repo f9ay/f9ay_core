@@ -38,15 +38,18 @@ public:
     HuffmanCoding() = default;
     ~HuffmanCoding() = default;
 
-    // user need to build the tree first
-    // then they can use getCodeMap to get the code map
-    // and they can use
+    HuffmanCoding(HuffmanCoding&& other) noexcept {
+        if (this == &other) {
+            return;
+        }
+        _root = std::move(other._root);
+        _codeMap = std::move(other._codeMap);
+        _elementToFrequencyMap = std::move(other._elementToFrequencyMap);
+    }
+
     template <ContainerConcept Container>
         requires std::same_as<typename Container::value_type, T>
-    void buildTree(const Container& data) {
-        using NodePtr = std::unique_ptr<HuffmanNode<T>>;
-        std::priority_queue<NodePtr, std::vector<NodePtr>, CompareNodes> nodesPq;
-
+    decltype(auto) add(const Container& data) {
         // count every element frequency
         // and build the map
         for (auto& element : data) {
@@ -54,15 +57,22 @@ public:
             if (findResultIterator == _elementToFrequencyMap.end()) {
                 _elementToFrequencyMap[element] = 1;
             } else {
-                _elementToFrequencyMap[element]++;
+                ++_elementToFrequencyMap[element];
             }
         }
+
+        return *this;
+    }
+
+    void build() {
+        using NodePtr = std::unique_ptr<HuffmanNode<T>>;
+        std::priority_queue<NodePtr, std::vector<NodePtr>, CompareNodes> nodesPq;
 
         // create nodes for each element
         // and push them to the priority queue
         // this will be the leaf nodes
         for (auto& [element, frequency] : _elementToFrequencyMap) {
-            auto node = std::make_unique<HuffmanNode<typename Container::value_type>>(frequency, element);
+            auto node = std::make_unique<HuffmanNode<T>>(frequency, element);
             nodesPq.push(std::move(node));
         }
 

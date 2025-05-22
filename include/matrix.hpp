@@ -186,13 +186,13 @@ public:
     }
 
     template <typename Func>
-    auto trans_convert(Func &&func) {
+    auto trans_convert(Func &&func) const {
         // 不能 return reference
-        Matrix<decltype(func(self()[0, 0]))> result(row(), col());
+        Matrix<std::decay_t<decltype(func((*this)[0, 0]))>> result(row(), col());
 #pragma loop(hint_parallel(0))
         for (int i = 0; i < row(); i++) {
             for (int j = 0; j < col(); j++) {
-                result[i, j] = func(self()[i, j]);
+                result[i, j] = func((*this)[i, j]);
             }
         }
         return result;

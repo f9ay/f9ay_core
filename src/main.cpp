@@ -1,4 +1,5 @@
 ﻿#include <array>
+#include <chrono>
 #include <filesystem>
 #include <functional>
 #include <iostream>
@@ -134,13 +135,20 @@ int main(int argc, char** argv) {
             // std::tie(buffer, sz) = Bmp::write(arg);
 
             Matrix<colors::RGB> mtx(1, 1);
-            mtx[0, 0] =
-                {0xFF, 0x00, 0x00};
+            mtx[0, 0] = {0xFF, 0x00, 0x00};
 
             std::ofstream out(path.parent_path() / "test.png",
                               std::ios::binary);
 
-            auto [buffer, size] = PNG::exportToByte(arg, FilterType::Up);
+            auto begin = std::chrono::high_resolution_clock::now();
+
+            auto [buffer, size] = PNG::exportToByte(arg, FilterType::Sub);
+            auto end = std::chrono::high_resolution_clock::now();
+
+            auto duration =
+                std::chrono::duration_cast<std::chrono::microseconds>(end -
+                                                                      begin);
+            std::cout << "Duration: " << duration.count() << " microseconds";
             out.write(reinterpret_cast<const char*>(buffer.get()), size);
         },
         result);

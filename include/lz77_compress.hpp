@@ -2,6 +2,8 @@
 #include <algorithm>
 #include <array>
 #include <concepts>
+#include <execution>
+#include <functional>
 #include <iostream>
 #include <numeric>
 #include <optional>
@@ -57,10 +59,10 @@ public:
                 if (it != hashTable.end()) {
                     // first push it back to the hash table
                     // find longest match
-                    auto matchBegin = it->second;
+                    auto dictMatchBegin = it->second;
 
                     // check if the match > 32768 (deflate limit)
-                    int offset = std::distance(matchBegin, bufferBegin);
+                    int offset = std::distance(dictMatchBegin, bufferBegin);
 
                     if (offset > 32768) {
                         // don't allow offset to be greater than 32768
@@ -74,30 +76,34 @@ public:
                     // save the hash key to the hash table
                     hashTable[hashKey] = bufferBegin;
                     // create two pointer to find longest match
-                    auto matchPointer = matchBegin;
-                    auto tempBufferPointer = bufferBegin;
-                    // find longest match
-                    while (tempBufferPointer != container.end() &&
-                           *matchPointer == *tempBufferPointer) {
-                        ++matchPointer;
-                        ++tempBufferPointer;
-                    }
+
+                    auto [dictMatchEnd, lookheadEnd] =
+                        std::mismatch(dictMatchBegin, container.end(),
+                                      bufferBegin, container.end());
 
                     // let bufferBegin point to the next character
                     // after the match
 
-                    int length = std::distance(matchBegin, matchPointer);
+                    int length = std::distance(dictMatchBegin, dictMatchEnd);
 
-                    bufferBegin = tempBufferPointer;
+                    if (lookheadEnd == container.end()) {
+                        // if the lookahead end is the end of the container
+                        // then we need to push back the last character
+                        // and break
+                        result.emplace_back(offset, length,
+                                            std::nullopt);
+                        break;
+                    }
+
+                    bufferBegin = lookheadEnd;
                     // push back the match
                     // and the next character
                     result.emplace_back(offset, length,
                                         (bufferBegin != container.end())
                                             ? std::make_optional(*bufferBegin)
                                             : std::nullopt);
-                    if (bufferBegin != container.end()) {
-                        bufferBegin++;
-                    }
+
+                    bufferBegin++;
 
                 } else {
                     // push the hash key to the hash table
@@ -105,7 +111,9 @@ public:
                     // no match found
                     // push back the literal value
                     result.emplace_back(0, 0, *bufferBegin);
-                    bufferBegin++;
+                    if (bufferBegin != container.end()) {
+                        bufferBegin++;
+                    }
                 }
 
             } else {

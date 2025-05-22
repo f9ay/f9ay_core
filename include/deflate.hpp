@@ -425,10 +425,35 @@ private:
                       "Fixed length table size mismatch");
         using value_type = std::decay_t<decltype(origMatrix[0, 0])>;
 
-        auto matrix = filter(origMatrix, filterType);
-        auto adler32 =
-            _calculateAdler32(reinterpret_cast<std::byte*>(matrix.raw()),
-                              matrix.row() * matrix.col());
+        auto filteredMatrix = filter(origMatrix, filterType);
+
+        // expand the scanline to include the filter type
+
+        auto filterTypeByte =
+            static_cast<std::byte>(static_cast<uint8_t>(filterType));
+
+        auto expandedRaw = reinterpret_cast<std::byte*>(filteredMatrix.raw());
+
+        auto expandedMatrix =
+            Matrix{expandedRaw, filteredMatrix.row(),
+                   filteredMatrix.col() * static_cast<int>(sizeof(value_type))};
+
+        Matrix<std::byte> expandedMatrixWithFilter(expandedMatrix.row(),
+                                                   expandedMatrix.col() + 1);
+
+        for (int i = 0; i < expandedMatrix.row(); i++) {
+            expandedMatrixWithFilter[i][0] = filterTypeByte;
+            for (int j = 1; j < expandedMatrix.col(); j++) {
+                expandedMatrixWithFilter[i][j] =
+                    expandedMatrix[i][j - 1];  // copy the data
+            }
+        }
+
+        // calculate the adler32 checksum
+
+        auto adler32 = _calculateAdler32(
+            reinterpret_cast<std::byte*>(expandedMatrixWithFilter.raw()),
+            expandedMatrixWithFilter.row() * expandedMatrixWithFilter.col());
 
         BitWriter bitWriter;
 
@@ -445,7 +470,7 @@ private:
         bitWriter.writeBitsFromLSB(std::byte{0b00000001},
                                    2);  // BTYPE (fixed)
 
-        auto flattened = matrix.flattenToSpan();
+        auto flattened = expandedMatrixWithFilter.flattenToSpan();
         // Apply LZ77 compression
         auto vec = LZ77::lz77Encode(flattened);
 

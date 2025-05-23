@@ -472,7 +472,7 @@ private:
 
         auto flattened = expandedMatrixWithFilter.flattenToSpan();
         // Apply LZ77 compression
-        auto vec = LZ77::lz77Encode(flattened);
+        auto vec = LZ77::lz77EncodeSlow(flattened);
 
         for (auto& [offset, length, value] : vec) {
             if (length == 0 && value.has_value()) {

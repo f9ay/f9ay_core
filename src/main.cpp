@@ -134,21 +134,10 @@ int main(int argc, char** argv) {
         [&buffer, &sz, &path](auto&& arg) {
             // std::tie(buffer, sz) = Bmp::write(arg);
 
-            Matrix<colors::RGB> mtx(1, 1);
-            mtx[0, 0] = {0xFF, 0x00, 0x00};
-
             std::ofstream out(path.parent_path() / "test.png",
                               std::ios::binary);
 
-            auto begin = std::chrono::high_resolution_clock::now();
-
             auto [buffer, size] = PNG::exportToByte(arg, FilterType::Sub);
-            auto end = std::chrono::high_resolution_clock::now();
-
-            auto duration =
-                std::chrono::duration_cast<std::chrono::microseconds>(end -
-                                                                      begin);
-            std::cout << "Duration: " << duration.count() << " microseconds";
             out.write(reinterpret_cast<const char*>(buffer.get()), size);
         },
         result);
@@ -160,7 +149,7 @@ int main(int argc, char** argv) {
 
     std::string test = "AAAAAAAAAAAAAAAAAAAA";
 
-    auto vec = LZ77::lz77Encode(test);
+    auto vec = LZ77::lz77EncodeSlow(test);
     for (auto [offset, length, value] : vec) {
         std::cout << "Offset: " << offset << ", Length: " << length
                   << ", Value: " << (value.has_value() ? *value : ' ') << "\n";

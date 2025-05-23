@@ -8,18 +8,21 @@ enum class FilterType { None, Sub, Up, Average, Paeth };
 
 namespace f9ay::deflate {
 template <typename T>
-T paethPredictor(T a, T b, T c) {
-    T p = a + b - c;
-    T pa = std::abs(p - a);
-    T pb = std::abs(p - b);
-    T pc = std::abs(p - c);
+T paethPredictor(T left, T above, T upperLeft) {
+    // in theory the T will only one byte
 
+    int p = static_cast<int>(left) + static_cast<int>(above) -
+            static_cast<int>(upperLeft);
+
+    int pa = std::abs(static_cast<int>(left) - p);
+    int pb = std::abs(static_cast<int>(above) - p);
+    int pc = std::abs(static_cast<int>(upperLeft) - p);
     if (pa <= pb && pa <= pc) {
-        return a;
+        return left;
     } else if (pb <= pc) {
-        return b;
+        return above;
     } else {
-        return c;
+        return upperLeft;
     }
 }
 
@@ -27,52 +30,96 @@ template <MATRIX_CONCEPT InputMatrix>
 inline Matrix<std::decay_t<decltype(std::declval<InputMatrix>()[0, 0])>> filter(
     const InputMatrix& matrix, FilterType filterType) {
     using T_val = std::decay_t<decltype(matrix[0, 0])>;
-    f9ay::Matrix<T_val> filteredMatrix(matrix.row(), matrix.col() + 1);
+    f9ay::Matrix<T_val> filteredMatrix(matrix.row(), matrix.col());
 
     for (int i = 0; i < matrix.row(); ++i) {
         // Add filter type to the first byte of the scanline
-        filteredMatrix[i, 0] =
-            static_cast<T_val>(static_cast<uint8_t>(filterType));
-
         for (int j = 0; j < matrix.col(); ++j) {
-            T_val current_byte = matrix[i, j];
-            T_val byteA = (j == 0) ? static_cast<T_val>(0)
-                                   : matrix[i, j - 1];  // byte to the left
-            T_val byteB = (i == 0) ? static_cast<T_val>(0)
+            T_val currentByte = matrix[i, j];
+
+            // Raw(x-bpp): byte at same component in previous pixel
+            T_val left = (j == 0) ? static_cast<T_val>(0)
+                                  : matrix[i, j - 1];  // byte to the left
+            T_val above = (i == 0) ? static_cast<T_val>(0)
                                    : matrix[i - 1, j];  // byte above
-            T_val byteC = (i == 0 || j == 0)
-                              ? static_cast<T_val>(0)
-                              : matrix[i - 1, j - 1];  // byte upper-left
+            T_val upperLeft = (i == 0 || j == 0)
+                                  ? static_cast<T_val>(0)
+                                  : matrix[i - 1, j - 1];  // byte upper-left
 
             T_val filteredByteVal;
 
             switch (filterType) {
                 case FilterType::None:
-                    filteredByteVal = current_byte;
+                    filteredByteVal = currentByte;
                     break;
                 case FilterType::Sub:
-                    filteredByteVal = current_byte - byteA;
+                    filteredByteVal = currentByte - left;
                     break;
                 case FilterType::Up:
-                    filteredByteVal = current_byte - byteB;
+                    filteredByteVal = currentByte - above;
                     break;
                 case FilterType::Average: {
-                    // For uint8_t, (byte_a + byte_b) can be up to 510.
-                    // Standard says "sum is performed with no overflow" then
-                    // integer division. (unsigned(a) + unsigned(b)) / 2
-                    unsigned int sum_ab = static_cast<unsigned int>(byteA) +
-                                          static_cast<unsigned int>(byteB);
-                    filteredByteVal =
-                        current_byte - static_cast<T_val>(sum_ab / 2);
+                    if constexpr (sizeof(T_val) == 4) {
+                        auto [a, b, c, d] = currentByte;
+                        auto [e, f, g, h] = left;
+                        auto [i, j, k, l] = above;
+
+                        a -= (e + i) / 2;
+                        b -= (f + j) / 2;
+                        c -= (g + k) / 2;
+                        d -= (h + l) / 2;
+                        filteredByteVal = {
+                            static_cast<uint8_t>(a), static_cast<uint8_t>(b),
+                            static_cast<uint8_t>(c), static_cast<uint8_t>(d)};
+                    } else if (sizeof(T_val) == 3) {
+                        auto [a, b, c] = currentByte;
+                        auto [e, f, g] = left;
+                        auto [i, j, k] = above;
+
+                        a -= (e + i) / 2;
+                        b -= (f + j) / 2;
+                        c -= (g + k) / 2;
+                        filteredByteVal = {static_cast<uint8_t>(a),
+                                           static_cast<uint8_t>(b),
+                                           static_cast<uint8_t>(c)};
+                    } else {
+                        throw std::runtime_error("Unsupported color type");
+                    }
                     break;
                 }
                 case FilterType::Paeth: {
-                    T_val predictor = paethPredictor(byteA, byteB, byteC);
-                    filteredByteVal = current_byte - predictor;
+                    if constexpr (sizeof(T_val) == 4) {
+                        auto [a, b, c, d] = currentByte;
+                        auto [e, f, g, h] = left;
+                        auto [i, j, k, l] = above;
+                        auto [m, n, o, p] = upperLeft;
+
+                        a -= paethPredictor(e, i, m);
+                        b -= paethPredictor(f, j, n);
+                        c -= paethPredictor(g, k, o);
+                        d -= paethPredictor(h, l, p);
+                        filteredByteVal = {
+                            static_cast<uint8_t>(a), static_cast<uint8_t>(b),
+                            static_cast<uint8_t>(c), static_cast<uint8_t>(d)};
+                    } else if constexpr (sizeof(T_val) == 3) {
+                        auto [a, b, c] = currentByte;
+                        auto [e, f, g] = left;
+                        auto [i, j, k] = above;
+                        auto [m, n, o] = upperLeft;
+
+                        a -= paethPredictor(e, i, m);
+                        b -= paethPredictor(f, j, n);
+                        c -= paethPredictor(g, k, o);
+                        filteredByteVal = {static_cast<uint8_t>(a),
+                                           static_cast<uint8_t>(b),
+                                           static_cast<uint8_t>(c)};
+                    } else {
+                        throw std::runtime_error("Unsupported color type");
+                    }
                     break;
                 }
             }
-            filteredMatrix[i, j + 1] = filteredByteVal;
+            filteredMatrix[i, j] = filteredByteVal;
         }
     }
 

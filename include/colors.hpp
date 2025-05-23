@@ -32,13 +32,22 @@ concept color_type =
     std::same_as<T, colors::YCbCr>;
 
 template <color_type ColorType>
-int abs (const ColorType& color) {
+int distance(const ColorType& l, const ColorType& r) {
     if constexpr (sizeof(ColorType) == 4) {
-        auto [a, b, c, d] = color;
-        return std::abs(a) + std::abs(b) + std::abs(c) + std::abs(d);
+        auto [a, b, c, d] = l;
+        auto [e, f, g, h] = r;
+        // need to cast to int to avoid overflow
+        return std::abs(static_cast<int>(a) - static_cast<int>(e)) +
+               std::abs(static_cast<int>(b) - static_cast<int>(f)) +
+               std::abs(static_cast<int>(c) - static_cast<int>(g)) +
+               std::abs(static_cast<int>(d) - static_cast<int>(h));
     } else {
-        auto [a, b, c] = color;
-        return std::abs(a) + std::abs(b) + std::abs(c);
+        auto [a, b, c] = l;
+        auto [e, f, g] = r;
+        // need to cast to int to avoid overflow
+        return std::abs(static_cast<int>(a) - static_cast<int>(e)) +
+               std::abs(static_cast<int>(b) - static_cast<int>(f)) +
+               std::abs(static_cast<int>(c) - static_cast<int>(g));
     }
 }
 
@@ -47,11 +56,13 @@ ColorType operator+(const ColorType& l, const ColorType& r) {
     if constexpr (sizeof(ColorType) == 4) {
         auto [a, b, c, d] = l;
         auto [e, f, g, h] = r;
-        return {a + e, b + f, c + g, h + d};
+        return {static_cast<uint8_t>(a + e), static_cast<uint8_t>(b + f),
+                static_cast<uint8_t>(c + g), static_cast<uint8_t>(d + h)};
     } else {
         auto [a, b, c] = l;
         auto [e, f, g] = r;
-        return {a + e, b + f, c + g};
+        return {static_cast<uint8_t>(a + e), static_cast<uint8_t>(b + f),
+                static_cast<uint8_t>(c + g)};
     }
 }
 
@@ -60,11 +71,13 @@ ColorType operator-(const ColorType& l, const ColorType& r) {
     if constexpr (sizeof(ColorType) == 4) {
         auto [a, b, c, d] = l;
         auto [e, f, g, h] = r;
-        return {a - e, b - f, c - g, h - d};
+        return {static_cast<uint8_t>(a - e), static_cast<uint8_t>(b - f),
+                static_cast<uint8_t>(c - g), static_cast<uint8_t>(d - h)};
     } else {
         auto [a, b, c] = l;
         auto [e, f, g] = r;
-        return {a - e, b - f, c - g};
+        return {static_cast<uint8_t>(a - e), static_cast<uint8_t>(b - f),
+                static_cast<uint8_t>(c - g)};
     }
 }
 
@@ -94,25 +107,33 @@ ColorType operator/(const ColorType& l, const ColorType& r) {
     }
 }
 
+template <color_type ColorType>
+ColorType operator/(const ColorType& l, int r) {
+    if constexpr (sizeof(ColorType) == 4) {
+        auto [a, b, c, d] = l;
+        return {static_cast<uint8_t>(a / r), static_cast<uint8_t>(b / r),
+                static_cast<uint8_t>(c / r), static_cast<uint8_t>(d / r)};
+    } else {
+        auto [a, b, c] = l;
+        return {static_cast<uint8_t>(a / r), static_cast<uint8_t>(b / r),
+                static_cast<uint8_t>(c / r)};
+    }
+}
 }  // namespace f9ay::colors
 
 template <f9ay::colors::color_type ColorType, typename Char_T>
-struct std::formatter<ColorType, Char_T>
-    : std::formatter<std::string, Char_T> {
+struct std::formatter<ColorType, Char_T> : std::formatter<std::string, Char_T> {
     auto format(const ColorType& color, auto& ctx) const {
         if constexpr (sizeof(ColorType) == 4) {
             auto [a, b, c, d] = color;
-            return std::format_to(
-                ctx.out(), "({}, {}, {}, {})", a, b, c, d);
+            return std::format_to(ctx.out(), "({}, {}, {}, {})", a, b, c, d);
 
         } else {
             auto [a, b, c] = color;
-            return std::format_to(
-                ctx.out(), "({}, {}, {})", a, b, c);
+            return std::format_to(ctx.out(), "({}, {}, {})", a, b, c);
         }
     }
 };
-
 
 template <f9ay::colors::color_type ColorType>
 struct std::hash<ColorType> {
@@ -126,4 +147,3 @@ struct std::hash<ColorType> {
         }
     }
 };
-

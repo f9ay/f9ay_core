@@ -223,6 +223,12 @@ public:
         data = new T[span.size()];
         std::copy(span.begin(), span.end(), data);
     }
+
+    Matrix(const T *data, const int _rows, const int _cols)
+        : rows(_rows), cols(_cols) {
+        this->data = new T[rows * cols];
+        std::copy(data, data + (rows * cols), this->data);
+    }
     ~Matrix() {
         delete[] data;
     }

@@ -31,6 +31,12 @@ struct ArrayHash {
 };
 class LZ77 {
 public:
+    // fast version of lz77
+    // we use a windows that size is 3
+    // and find it in the hash table
+    // the hash table contains only one iterator
+    // to the container
+    // then we only find the longest match from that iterator
     template <int dictSize = 4096, int hashKeyLen = 3, int maxMatchLen = 258,
               ContainerConcept Container>
     static auto lz77EncodeFast(const Container& container) {
@@ -134,6 +140,14 @@ public:
         return result;
     }
 
+    // slow version of lz77
+    // we use a windows that size is 3
+    // and find it in the hash table
+    // the hash table is a list of iterators
+    // to the container
+    // then we iterate over the list of iterators
+    // and find the longest match
+    // to get best compression
     template <int dictSize = 4096, int hashKeyLen = 3, int maxMatchLen = 258,
               ContainerConcept Container>
     static auto lz77EncodeSlow(const Container& container) {
@@ -174,10 +188,11 @@ public:
                                       static_cast<int>(std::distance(
                                           bufferBegin, container.end()))});
                         auto [dictMatchEnd, lookheadEnd] = std::mismatch(
-                            dictMatchbegin, dictMatchbegin + maxPossibleLength, bufferBegin,
-                            bufferBegin + maxPossibleLength);
+                            dictMatchbegin, dictMatchbegin + maxPossibleLength,
+                            bufferBegin, bufferBegin + maxPossibleLength);
 
-                        int length = std::distance(dictMatchbegin, dictMatchEnd);
+                        int length =
+                            std::distance(dictMatchbegin, dictMatchEnd);
                         if (length > maxLength) {
                             maxLength = length;
                             offset = std::distance(dictMatchbegin, bufferBegin);

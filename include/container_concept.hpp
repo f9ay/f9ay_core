@@ -11,6 +11,7 @@ concept ContainerConcept = requires(T t, const T ct) {
     // { ct.end() } -> std::same_as<typename T::const_iterator>;
     { t[0] };
     { ct[0] };
+    {t.size()};
 };
 
 template <typename T>

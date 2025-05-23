@@ -98,6 +98,13 @@ public:
         return _decodeRecursively(data, (size_t)0, _root);
     }
 
+    std::vector<std::byte> getMapping(T data) const {
+        if (!_codeMap.contains(data)) {
+            throw std::runtime_error("not found");
+        }
+        return _codeMap.at(data);
+    }
+
     std::unordered_map<T, std::vector<std::byte>> getCodeMap() {
         if (_root == nullptr) {
             throw std::runtime_error("Huffman tree not built");

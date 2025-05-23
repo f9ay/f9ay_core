@@ -137,8 +137,7 @@ int test_img() {
             Matrix<colors::RGB> mtx(1, 1);
             mtx[0, 0] = {0xFF, 0x00, 0x00};
 
-            std::ofstream out(path.parent_path() / "test.png",
-                              std::ios::binary);
+            std::ofstream out(path.parent_path() / "test.png", std::ios::binary);
 
             auto [buffer, size] = PNG::exportToByte(arg, FilterType::Up);
             out.write(reinterpret_cast<const char*>(buffer.get()), size);
@@ -147,29 +146,33 @@ int test_img() {
 
     Matrix<colors::BGR> mtx(3, 3);
 
-    std::ofstream out(path.parent_path() / "fire_converted.bmp",
-                      std::ios::binary);
+    std::ofstream out(path.parent_path() / "fire_converted.bmp", std::ios::binary);
 
     std::string test = "aacaacabcabaaac";
 
     auto vec = LZ77::lz77Encode(test);
     for (auto [offset, length, value] : vec) {
-        std::cout << "Offset: " << offset << ", Length: " << length
-                  << ", Value: " << (value.has_value() ? *value : ' ') << "\n";
+        std::cout << "Offset: " << offset << ", Length: " << length << ", Value: " << (value.has_value() ? *value : ' ')
+                  << "\n";
     }
 
     std::cout << "done" << std::endl;
 
 #ifdef WIN32
     f9ay::test::windows::Windows windows{};
-    std::visit([&windows](auto&& arg) { windows.show(arg); }, result);
+    std::visit(
+        [&windows](auto&& arg) {
+            windows.show(arg);
+        },
+        result);
 #endif
     return 0;
 }
 
 int main(int argc, char** argv) {
+    // std::println("{}", Jpeg::category(1024));
     std::filesystem::path path = std::source_location::current().file_name();
-    path = path.parent_path().parent_path() / "test_data" / "test.bmp";
+    path = path.parent_path().parent_path() / "test_data" / "test2.bmp";
     std::cout << path << std::endl;
     std::ifstream fs(path, std::ios::binary);
     if (!fs.is_open()) {
@@ -187,5 +190,9 @@ int main(int argc, char** argv) {
             mtx[i, j].b = res[i, j].b;
         }
     }
-    Jpeg::write(mtx);
+    auto [buffer, size] = Jpeg::write(mtx);
+
+    std::ofstream out(path.parent_path() / "test.jpeg", std::ios::binary);
+    out.write(reinterpret_cast<const char*>(buffer.get()), size);
+    std::cout << "done" << std::endl;
 }

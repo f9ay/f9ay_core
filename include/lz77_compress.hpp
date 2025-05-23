@@ -31,7 +31,7 @@ struct ArrayHash {
 };
 class LZ77 {
 public:
-    template <int dictSize = 4096, int hashKeyLen = 3,
+    template <int dictSize = 4096, int hashKeyLen = 3, int maxMatchLen = 258,
               ContainerConcept Container>
     static auto lz77EncodeFast(const Container& container) {
         std::vector<
@@ -74,13 +74,18 @@ public:
                         bufferBegin++;
                         continue;
                     }
+                    int maxPossibleLength =
+                        std::min({maxMatchLen,
+                                  static_cast<int>(std::distance(
+                                      dictMatchBegin, container.end())),
+                                  static_cast<int>(std::distance(
+                                      bufferBegin, container.end()))});
                     // save the hash key to the hash table
                     hashTable[hashKey] = bufferBegin;
-                    // create two pointer to find longest match
 
-                    auto [dictMatchEnd, lookheadEnd] =
-                        std::mismatch(dictMatchBegin, container.end(),
-                                      bufferBegin, container.end());
+                    auto [dictMatchEnd, lookheadEnd] = std::mismatch(
+                        dictMatchBegin, dictMatchBegin + maxPossibleLength,
+                        bufferBegin, bufferBegin + maxPossibleLength);
 
                     // let bufferBegin point to the next character
                     // after the match
@@ -129,7 +134,7 @@ public:
         return result;
     }
 
-    template <int dictSize = 4096, int hashKeyLen = 3,
+    template <int dictSize = 4096, int hashKeyLen = 3, int maxMatchLen = 258,
               ContainerConcept Container>
     static auto lz77EncodeSlow(const Container& container) {
         std::unordered_map<
@@ -161,20 +166,21 @@ public:
                     int offset = 0;
                     decltype(container.begin()) maxMatchEnd;
 
-                    for (auto match : it->second) {
-                        if (std::distance(match, bufferBegin) > 32768) {
-                            // remove from list
-                            continue;
-                        }
+                    for (auto dictMatchbegin : it->second) {
+                        int maxPossibleLength =
+                            std::min({maxMatchLen,
+                                      static_cast<int>(std::distance(
+                                          dictMatchbegin, container.end())),
+                                      static_cast<int>(std::distance(
+                                          bufferBegin, container.end()))});
+                        auto [dictMatchEnd, lookheadEnd] = std::mismatch(
+                            dictMatchbegin, dictMatchbegin + maxPossibleLength, bufferBegin,
+                            bufferBegin + maxPossibleLength);
 
-                        auto [dictMatchEnd, lookheadEnd] =
-                            std::mismatch(match, container.end(), bufferBegin,
-                                          container.end());
-
-                        int length = std::distance(match, dictMatchEnd);
+                        int length = std::distance(dictMatchbegin, dictMatchEnd);
                         if (length > maxLength) {
                             maxLength = length;
-                            offset = std::distance(match, bufferBegin);
+                            offset = std::distance(dictMatchbegin, bufferBegin);
                             maxMatchEnd = lookheadEnd;
                         }
                     }

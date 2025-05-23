@@ -135,7 +135,11 @@ public:
     // then we iterate over the list of iterators
     // and find the longest match
     // to get best compression
+<<<<<<< HEAD
     template <int dictSize = 4096, int hashKeyLen = 3, int maxMatchLen = 258, ContainerConcept Container>
+=======
+    template <int dictSize = 4096, int hashKeyLen = 3, int maxMatchLen = 258, ContainerConcept Container>
+>>>>>>> 81a2fac (add comment on lz77)
     static auto lz77EncodeSlow(const Container& container) {
         std::unordered_map<std::array<typename Container::value_type, hashKeyLen>,
                            std::list<decltype(container.begin())>,

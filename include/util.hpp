@@ -1,9 +1,18 @@
 #pragma once
 #include <bit>
+#include <bitset>
 #include <cstddef>
 #include <vector>
 
 namespace f9ay {
+
+inline std::string to_str(uint32_t val, uint32_t len) {
+    std::string s = std::bitset<32>(val).to_string();
+    std::ranges::reverse(s);
+    s.resize(len);
+    std::ranges::reverse(s);
+    return s;
+}
 
 template <int N>
 concept PowerOf2 = (N & (N - 1)) == 0;
@@ -72,6 +81,7 @@ public:
 
     template <typename T>
     void writeBitsFromMSB(T data, int count) {
+        // std::println("MSB {}", to_str(data, count));
         for (int i = count - 1; i >= 0; i--) {
             writeBit(static_cast<bool>((data >> i) & T{1}));
         }
@@ -112,4 +122,5 @@ private:
     // decide write from MSB or LSB
     WriteSequence _writeSequence = WriteSequence::MSB;
 };
+
 }  // namespace f9ay

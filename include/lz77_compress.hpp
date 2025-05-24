@@ -188,15 +188,14 @@ public:
                                       static_cast<int>(std::distance(
                                           bufferBegin, container.end()))});
                         auto [dictMatchEnd, lookheadEnd] = std::mismatch(
-                            dictMatchbegin, dictMatchbegin + maxPossibleLength,
-                            bufferBegin, bufferBegin + maxPossibleLength);
+                            dictMatchbegin, dictMatchbegin + maxPossibleLength, bufferBegin,
+                            bufferBegin + maxPossibleLength);
 
-                        int length =
-                            std::distance(dictMatchbegin, dictMatchEnd);
+                        int length = std::distance(dictMatchbegin, dictMatchEnd);
                         if (length > maxLength) {
                             maxLength = length;
                             offset = std::distance(dictMatchbegin, bufferBegin);
-                            maxMatchEnd = lookheadEnd;
+                            maxMatchEnd = lookheadEnd; 
                         }
                     }
 
@@ -256,12 +255,12 @@ public:
                     result.insert(result.end(), start, end);
 
                     // add rest of the length
-                    auto restHead = result.end() - offset;
-                    for (int i = 0; i < length - offset; i++) {
-                        if (restHead != result.end()) {
-                            result.push_back(*restHead);
-                            ++restHead;
-                        }
+                    auto startIt = result.end() - offset;
+                    std::vector<typename Container::value_type> temp(
+                        startIt, result.end());
+
+                    for (size_t i = 0; i < length - offset; ++i) {
+                        result.push_back(temp[i % offset]);
                     }
                 } else {
                     result.insert(result.end(), result.end() - offset,

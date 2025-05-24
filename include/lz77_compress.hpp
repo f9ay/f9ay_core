@@ -135,11 +135,7 @@ public:
     // then we iterate over the list of iterators
     // and find the longest match
     // to get best compression
-<<<<<<< HEAD
     template <int dictSize = 4096, int hashKeyLen = 3, int maxMatchLen = 258, ContainerConcept Container>
-=======
-    template <int dictSize = 4096, int hashKeyLen = 3, int maxMatchLen = 258, ContainerConcept Container>
->>>>>>> 81a2fac (add comment on lz77)
     static auto lz77EncodeSlow(const Container& container) {
         std::unordered_map<std::array<typename Container::value_type, hashKeyLen>,
                            std::list<decltype(container.begin())>,
@@ -177,7 +173,7 @@ public:
                         if (length > maxLength) {
                             maxLength = length;
                             offset = std::distance(dictMatchbegin, bufferBegin);
-                            maxMatchEnd = lookheadEnd;
+                            maxMatchEnd = lookheadEnd; 
                         }
                     }
 
@@ -235,7 +231,12 @@ public:
 
                     // add rest of the length
                     auto startIt = result.end() - offset;
+<<<<<<< HEAD
                     std::vector<typename Container::value_type> temp(startIt, result.end());
+=======
+                    std::vector<typename Container::value_type> temp(
+                        startIt, result.end());
+>>>>>>> a0520c5 (increase huffman speed)
 
                     for (size_t i = 0; i < length - offset; ++i) {
                         result.push_back(temp[i % offset]);

@@ -44,6 +44,75 @@ int main(int argc, char** argv) {
             mtx[i, j].g = res[i, j].g;
             mtx[i, j].b = res[i, j].b;
         }
+    std::unique_ptr<std::byte[]> buffer;
+    size_t sz;
+    std::visit(
+        [&buffer, &sz, &path](auto&& arg) {
+            std::tie(buffer, sz) = Bmp::write(arg);
+
+            std::ofstream out(path.parent_path() / "test.png",
+                              std::ios::binary);
+
+            auto flattend = arg.flattenToSpan();
+            std::vector<std::byte> pixelBytes;
+            for (const auto& pixel : flattend) {
+                // 將像素轉換為字節序列
+                auto* bytePtr = reinterpret_cast<const std::byte*>(&pixel);
+                pixelBytes.insert(pixelBytes.end(), bytePtr,
+                                  bytePtr + sizeof(pixel));
+            }
+
+            HuffmanCoding<std::byte> huffman;
+
+            huffman.add(pixelBytes);
+
+            huffman.build();
+
+            // check if encode and decode works
+            auto codeMap = huffman.getCodeMap();
+
+            for (const auto& [key, value] : codeMap) {
+                std::cout << "Key: " << int(key) << ", Value: ";
+                for (const auto& byte : value) {
+                    std::cout << int(byte) << " ";
+                }
+                std::cout << std::endl;
+            }
+
+            std::vector<std::vector<std::byte>> encodedData;
+            for (const auto& pixel : pixelBytes) {
+                auto encoded = huffman.getMapping(pixel);
+                encodedData.push_back(encoded);
+            }
+
+            // check if the encoded data is correct
+
+            for (int i = 0; i < pixelBytes.size(); i++) {
+                auto decoded = huffman.decode(encodedData[i]);
+                if (decoded != pixelBytes[i]) {
+                    std::cerr << "Decoded data is not equal to original data "
+                                 "at index "
+                              << i << std::endl;
+                    return;
+                }
+            }
+
+            // auto [buffer, size] = PNG::exportToByte(arg, FilterType::Sub);
+            // out.write(reinterpret_cast<const char*>(buffer.get()), size);
+        },
+        result);
+
+    Matrix<colors::BGR> mtx(3, 3);
+
+    std::ofstream out(path.parent_path() / "fire_converted.bmp",
+                      std::ios::binary);
+
+    std::string test = "AAAAAAAAAAAAAAAAAAAA";
+
+    auto vec = LZ77::lz77EncodeSlow(test);
+    for (auto [offset, length, value] : vec) {
+        std::cout << "Offset: " << offset << ", Length: " << length
+                  << ", Value: " << (value.has_value() ? *value : ' ') << "\n";
     }
     // std::visit(
     //     [&path](auto&& arg) {

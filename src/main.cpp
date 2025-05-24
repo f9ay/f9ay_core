@@ -283,7 +283,7 @@ int main(int argc, char** argv) {
     }
     auto [buffer, size] = Jpeg::write(mtx);
 
-    std::ofstream out(path.parent_path() / "current.bmp", std::ios::binary);
+    std::ofstream out(path.parent_path() / "current.jpeg", std::ios::binary);
     out.write(reinterpret_cast<const char*>(buffer.get()), size);
     std::cout << "done" << std::endl;
 }

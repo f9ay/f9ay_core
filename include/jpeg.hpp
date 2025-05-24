@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <any>
+#include <bitset>
 #include <cstddef>
 #include <cstdint>
 #include <ranges>
@@ -9,24 +10,12 @@
 #include <vector>
 
 #include "dct.hpp"
-#include "huffman_coding.hpp"
+#include "huffman_tree.hpp"
 #include "importer.hpp"
 #include "matrix.hpp"
 #include "matrix_concept.hpp"
 #include "matrix_view.hpp"
 #include "util.hpp"
-
-namespace f9ay::internal {
-
-//[[deprecated]]
-inline std::pair<uint8_t, size_t> billy_to_value(const std::vector<std::byte> &billy) {
-    uint8_t result = 0;
-    for (int i = 0; i < billy.size(); i++) {
-        result |= static_cast<int>(billy[i]) << i;
-    }
-    return {result, billy.size()};
-}
-}  // namespace f9ay::internal
 
 namespace f9ay {
 class Jpeg {
@@ -53,6 +42,17 @@ private:
     static_assert(sizeof(JFIF_extension_APP0) == 10);
 
 public:
+    struct bit_content {
+        uint8_t value;
+        uint8_t size;
+        bit_content() = default;
+        bit_content(uint8_t v, uint8_t s) : value(v), size(s) {}
+
+        template <class T, class U>
+        bit_content(const std::pair<T, U> &p) : value(p.first), size(p.second) {}
+    };
+
+public:
     static Midway import(const std::byte *source) {
         const auto *jfif_app0 = safeMemberAssign<JFIF_APP0>(source);
         std::pair<const std::byte *, size_t> thumbnail_data = {
@@ -64,7 +64,7 @@ public:
             throw std::logic_error("JFIF version does not match");
         }
 
-        if (*reinterpret_cast<const uint16_t *>(it) != 0xFFDA) {
+        if (*reinterpret_cast<const uint16_t *>(it) != 0xFFDAu) {
             throw std::logic_error("JFIF SOS NOT match");
         }
         it += 2;
@@ -72,26 +72,23 @@ public:
 
         return {};
     }
-
+    inline static std::byte *start;
     static std::pair<std::unique_ptr<std::byte[]>, size_t> write(const Matrix<colors::RGB> &src) {
-        auto [y_dc, y_ac, uv_dc, uv_ac, dcs, acs] = encode(src);
-        std::println("{}", dcs[0]);
-        for (auto &[k, v] : y_dc.getCodeMap()) {
-            std::println("({}, {})", k, static_cast<int>(internal::billy_to_value(v).first));
-        }
-
-        std::println("{}", acs);
+        auto [dcs, acs] = encode(src);
+        auto [y_dc, y_ac, uv_dc, uv_ac] = build_huffman_tree(dcs, acs);
+        std::println("acs size : {}", acs[1][0, 0].size());
+        std::println("acs : {}", acs[1]);
         size_t size = 65354133;  // TODO
         std::unique_ptr<std::byte[]> result(new std::byte[size]{});
+        start = result.get();
         auto it = result.get();
-
-        write_byte<uint16_t>(it, 0xD8FF);  // little endian
+        write_byte<uint16_t, std::endian::big>(it, 0xFFD8u);
         it = write_app0(it);
-        it = write_dqt(it, y_quantization_matrix, uv_quantization_matrix);  // TODO cbcr qt
-        it = write_huffman_all(it, y_dc.getCodeMap(), y_ac.getCodeMap(), uv_dc.getCodeMap(), uv_ac.getCodeMap());
+        it = write_dqt(it, y_quantization_matrix, uv_quantization_matrix);
+        it = write_huffman_all(it, y_dc, y_ac, uv_dc, uv_ac);
         it = write_sof0_segment(it, src.row(), src.col());
         it = write_binary_stream(it, y_dc, y_ac, uv_dc, uv_ac, dcs, acs);
-        return {std::move(result), size};
+        return {std::move(result), it - result.get()};
     }
 
 private:
@@ -107,8 +104,7 @@ private:
     }
     static std::byte *write_app0(std::byte *it) {
         JFIF_APP0 header{.identifier = "JFIF"};
-        header.marker = 0xE0FF;  // little endian
-        // header.length = sizeof(JFIF_APP0); big endian
+        header.marker = 0xE0FFu;
         header.length = std::byteswap<uint16_t>(sizeof(JFIF_APP0) - sizeof(header.marker));
         header.version = 0x0101;
         header.Density_units = 0;
@@ -122,7 +118,7 @@ private:
     // DQT (Define Quantization Table)
     static std::byte *write_dqt(std::byte *it, const std::array<std::array<uint8_t, 8>, 8> &qt_y,
                                 const std::array<std::array<uint8_t, 8>, 8> &qt_uv) {
-        write_byte<uint16_t>(it, 0xDBFF);
+        write_byte<uint16_t, std::endian::big>(it, 0xFFDBu);
         std::byte *size_ptr = it;
         it += 2;
         // 精度 << 8 | ID
@@ -137,12 +133,9 @@ private:
         write_byte<uint16_t, std::endian::big>(size_ptr, it - size_ptr);  // 填入 size
         return it;
     }
-    static std::byte *write_huffman_all(
-        std::byte *it, const std::unordered_map<int8_t, std::vector<std::byte>> &y_dc,
-        const std::unordered_map<int8_t, std::vector<std::byte>> &y_ac,
-        const std::unordered_map<int8_t, std::vector<std::byte>> &uv_dc,
-        const std::unordered_map<int8_t, std::vector<std::byte>> &uv_ac) {
-        write_byte<uint16_t>(it, 0xC4FF);
+    static std::byte *write_huffman_all(std::byte *it, Huffman_tree &y_dc, Huffman_tree &y_ac, Huffman_tree &uv_dc,
+                                        Huffman_tree &uv_ac) {
+        write_byte<uint16_t, std::endian::big>(it, 0xFFC4u);
 
         auto size_ptr = it;
         it += 2;
@@ -150,48 +143,41 @@ private:
         write_byte<uint8_t>(it, 0);  // [DC : 0  ac : 1 ; ID]
         it = write_huffman_data(it, y_dc);
         /* Y AC segment */
-        write_byte<uint8_t>(it, 1 << 4 | 0);
+        write_byte<uint8_t>(it, (1u << 4) | 0);
         it = write_huffman_data(it, y_ac);
         /* CB CR  DC segment */
         write_byte<uint8_t>(it, 1);
         it = write_huffman_data(it, uv_dc);
         /* CB CR  AC segment */
-        write_byte<uint8_t>(it, 1 << 4 | 1);
+        write_byte<uint8_t>(it, (1u << 4) | 1);
         it = write_huffman_data(it, uv_ac);
 
         write_byte<uint16_t, std::endian::big>(size_ptr, it - size_ptr);
         return it;
     }
 
-    static std::byte *write_huffman_data(std::byte *it,
-                                         const std::unordered_map<int8_t, std::vector<std::byte>> &table) {
-        std::print("no unreached");
+    static std::byte *write_huffman_data(std::byte *it, Huffman_tree &tree) {
         std::array<uint8_t, 16> bits_array{};
-        for (const auto &v : table | std::views::values) {
-            if (v.size() == 0) [[unlikely]] {
-                throw std::logic_error("Huffman table is empty");
-            }
-            bits_array[v.size() - 1]++;  // size 不可能是 0
+        auto &standard_huffman_table = tree.get_standard_huffman_table();
+        std::println("standard_huffman_table : {}", standard_huffman_table);
+        for (const auto &[val, len] : standard_huffman_table) {
+            bits_array[len - 1]++;  // size 不可能是 0
         }
         write_byte(it, bits_array);
         std::vector<std::pair<uint8_t, uint8_t>> ht;
-        for (const auto &[k, v] : table) {
-            ht.emplace_back(v.size(), k);
-        }
-        std::ranges::sort(ht);
-        for (auto &v : ht | std::views::values) {
-            write_byte(it, v);
+        for (const auto &val : tree.get_standard_huffman_table() | std::views::keys) {
+            write_byte<uint8_t>(it, val);
         }
         return it;
     }
-    static std::byte *write_sof0_segment(std::byte *it, int width, int height) {
-        write_byte<uint16_t>(it, 0xC0FF);  // SOF0 marker
-        write_byte<uint16_t, std::endian::big>(
-            it, 17);                 // segment length (precision(1) + height(2) + width(2) + channels(1) + 3*channels)
+    static std::byte *write_sof0_segment(std::byte *it, int height, int width) {
+        write_byte<uint16_t, std::endian::big>(it, 0xFFC0u);  // SOF0 marker
+        auto size_ptr = it;
+        it += 2;                     // segment length (precision(1) + height(2) + width(2) + channels(1) +3*channels)
         write_byte<uint8_t>(it, 8);  // precision
-        write_byte<uint16_t, std::endian::big>(it, height);  // height
-        write_byte<uint16_t, std::endian::big>(it, width);   // width
-        write_byte<uint8_t>(it, 3);                          // 3 channels
+        write_byte<uint16_t, std::endian::big>(it, height);
+        write_byte<uint16_t, std::endian::big>(it, width);  // width
+        write_byte<uint8_t>(it, 3);                         // 3 channels
 
         // Channel: Y
         write_byte<uint8_t>(it, 1);     // component ID: Y
@@ -208,14 +194,14 @@ private:
         write_byte<uint8_t>(it, 0x11);  // sampling factors: H=1, V=1
         write_byte<uint8_t>(it, 1);     // quant table ID: 1
 
+        write_byte<uint16_t, std::endian::big>(size_ptr, it - size_ptr);
         return it;
     }
     static std::byte *write_binary_stream(
-        std::byte *it, const HuffmanCoding<int8_t> &y_dc_huffman, const HuffmanCoding<int8_t> &y_ac_huffman,
-        HuffmanCoding<int8_t> &uv_dc_huffman, HuffmanCoding<int8_t> &uv_ac_huffman,
-        std::vector<std::vector<signed char>> &dcs,
-        std::vector<Matrix<std::vector<std::pair<signed char, unsigned char>>>> &acs) {
-        write_byte<uint16_t>(it, 0xDAFF);
+        std::byte *it, Huffman_tree &y_dc_huffman, Huffman_tree &y_ac_huffman, Huffman_tree &uv_dc_huffman,
+        Huffman_tree &uv_ac_huffman, std::vector<std::vector<signed char>> &dcs,
+        std::vector<Matrix<std::vector<std::pair<unsigned char, unsigned char>>>> &acs) {
+        write_byte<uint16_t, std::endian::big>(it, 0xFFDAu);
         auto size_ptr = it;
         it += 2;
         write_byte<uint8_t>(it, 3);     // 3 channels for Y Cb Cr
@@ -225,90 +211,80 @@ private:
         write_byte<uint8_t>(it, 0x11);  // Cb huffman id
         write_byte<uint8_t>(it, 3);     // Cr
         write_byte<uint8_t>(it, 0x11);  // Cr huffman id
-        write_byte<uint8_t>(it, 0x01);  // Ss = 1
+        write_byte<uint8_t>(it, 0x00);  // Ss = 0
         write_byte<uint8_t>(it, 0x3F);  // Se = 63
         write_byte<uint8_t>(it, 0x00);  // Successive Approximation Bit Setting, Ah/Al
-
-        const size_t mcu_cnt = dcs[0].size() / 4;
-        if (dcs[0].size() / 4 != dcs[1].size() && dcs[0].size() / 4 != dcs[2].size()) {
+        write_byte<uint16_t, std::endian::big>(size_ptr, it - size_ptr);
+        const size_t mcu_cnt = dcs[0].size() / 4 + (dcs[0].size() % 4 == 0 ? 0 : 1);
+        if (mcu_cnt != dcs[1].size() && mcu_cnt != dcs[2].size()) {
             throw std::logic_error("data size mismatch");
         }
         BitWriter bit_writer;
+        bit_writer.changeWriteSequence(WriteSequence::MSB);
+        y_dc_huffman.dump();
+        std::println("===========================================================================");
+        uv_dc_huffman.dump();
+        std::println("===========================================================================");
+        uv_ac_huffman.dump();
+        std::println("===========================================================================");
+        auto y_dc_encoded = encode_huffman_dc(dcs[0], y_dc_huffman);
+        auto cb_dc_encoded = encode_huffman_dc(dcs[1], uv_dc_huffman);
+        auto cr_dc_encoded = encode_huffman_dc(dcs[2], uv_dc_huffman);
+        std::println("{}\n{}\n{}", y_dc_encoded, cb_dc_encoded, cr_dc_encoded);
         for (int i = 0; i < mcu_cnt; i++) {
-            // Y channel
-            for (int j = 0; j < 4; j++) {
-                // write dc
-                {
-                    const auto &y = dcs[0][i * 4 + j];
-                    auto [category_huff, huff_cnt] = internal::billy_to_value(y_dc_huffman.getMapping(category(y)));
-
-                    bit_writer.writeBitsFromMSB(category_huff, huff_cnt);
-
-                    bit_writer.writeBit(dcs[0][i * 4 + j]);
-
-                    bit_writer.writeBitsFromMSB(dcs[0][i * 4 + j], category(dcs[0][i * 4 + j]));
-                }
-
-                auto ac_span = acs[0].flattenToSpan();
-
-                auto current_ac_span = std::span(ac_span[i * 4 + j]);
-                // write ac
-                for (int k = 0; k < current_ac_span.size(); k++) {
-                    // TODO 寫入 AC
-                    auto [huff, huff_cnt] = internal::billy_to_value(y_ac_huffman.getMapping(current_ac_span[k].first));
-                    bit_writer.writeBitsFromMSB(huff, huff_cnt);
-
-                    int amp_size = current_ac_span[k].first & 0xF;
-                    if (amp_size != 0) {
-                        bit_writer.writeBitsFromMSB(current_ac_span[k].second, amp_size);
-                    }
-                }
+            for (int y_index = i * 4; y_index < i * 4 + 4 && y_index < dcs[0].size(); y_index++) {
+                auto acspan = acs[0].flattenToSpan();
+                write_block(bit_writer, y_dc_encoded[y_index], acspan[y_index], y_ac_huffman);
             }
-
-            for (int j = 1; j <= 2; j++) {  // 1 : cb 2 : cr
-                {
-                    const auto &y = dcs[j][i];
-                    auto [category_huff, huff_cnt] = internal::billy_to_value(uv_dc_huffman.getMapping(category(y)));
-
-                    bit_writer.writeBitsFromMSB(category_huff, huff_cnt);
-
-                    bit_writer.writeBit(dcs[j][i]);
-
-                    bit_writer.writeBitsFromMSB(dcs[j][i], category(dcs[j][i]));
-                }
-
-                auto ac_span = acs[j].flattenToSpan();
-
-                auto current_ac_span = std::span(ac_span[i]);
-
-                // write ac
-                for (int k = 0; k < current_ac_span.size(); k++) {
-                    // TODO 寫入 AC
-                    auto [huff, huff_cnt] =
-                        internal::billy_to_value(uv_ac_huffman.getMapping(current_ac_span[k].first));
-                    bit_writer.writeBitsFromMSB(huff, huff_cnt);
-
-                    int amp_size = current_ac_span[k].first & 0xF;
-                    if (amp_size != 0) {
-                        bit_writer.writeBitsFromMSB(current_ac_span[k].second, amp_size);
-                    }
-                }
+            {  // cb
+                auto acspan = acs[1].flattenToSpan();
+                write_block(bit_writer, cb_dc_encoded[i], acspan[i], uv_ac_huffman);
+            }
+            {  // cr
+                auto acspan = acs[2].flattenToSpan();
+                write_block(bit_writer, cr_dc_encoded[i], acspan[i], uv_ac_huffman);
             }
         }
 
         auto buffer = bit_writer.getBuffer();
 
+        std::println("cb dc statdard mapping {}", uv_dc_huffman.get_standard_huffman_mapping());
+        std::println("cr ac statdard mapping {}", uv_ac_huffman.get_standard_huffman_mapping());
+        auto current = it;
+        for (auto &b : buffer) {
+            std::println("{:X} : {} ", (size_t)(current++ - start), std::bitset<8>(unsigned(b)).to_string());
+            if (b == std::byte{0xFFu}) {
+                std::println("{:X} : {} ", (size_t)(current++ - start), std::bitset<8>(unsigned(0)).to_string());
+            }
+        }
+
         for (auto &b : buffer) {
             write_byte(it, b);
             if (b == std::byte{0xFFu}) {
-                write_byte(it, static_cast<std::byte>(0));
+                write_byte<uint8_t>(it, 0u);
             }
         }
-        write_byte<uint8_t>(it, uint8_t(0xD9FFu));
-        write_byte<uint16_t, std::endian::big>(size_ptr, it - size_ptr);
+        write_byte<uint16_t, std::endian::big>(it, static_cast<uint16_t>(0xFFD9u));
+        // write_byte<uint16_t, std::endian::big>(size_ptr, it - size_ptr);
         std::print(" {} ", it - size_ptr);
         return it;
     }
+    static void write_block(BitWriter &bit_writer, const std::pair<bit_content, std::optional<bit_content>> &dc,
+                            const std::vector<std::pair<unsigned char, unsigned char>> &ac, auto &huffman) {
+        auto &[f, s] = dc;
+        bit_writer.writeBitsFromMSB(f.value, f.size);
+        if (s.has_value()) {
+            bit_writer.writeBitsFromMSB(s.value().value, s.value().size);
+        }
+        auto ac_encoded = encode_huffman_ac(ac, huffman);
+        for (auto &[f, s] : ac_encoded) {
+            bit_writer.writeBitsFromMSB(f.value, f.size);
+            if (s.has_value()) {
+                bit_writer.writeBitsFromMSB(s.value().value, s.value().size);
+            }
+        }
+    }
+
     static auto encode(const Matrix<colors::RGB> &src) {
         auto yuv = src.trans_convert([](const colors::RGB &color) -> colors::YCbCr {
             const auto &[r, g, b] = color;
@@ -324,8 +300,6 @@ private:
         for (int i = 0; i < src.row(); i++) {
             for (int j = 0; j < src.col(); j++) {
                 Y[i, j] = yuv[i, j].y;
-                // Cb[i, j] = yuv[i, j].cb;
-                // Cr[i, j] = yuv[i, j].cr;
             }
         }
         // Downsampling
@@ -344,10 +318,9 @@ private:
         auto split_cb = split<8>(Cb);
         auto split_cr = split<8>(Cr);
 
-        HuffmanCoding<int8_t> y_dc, y_ac, uv_dc, uv_ac;
         std::vector<std::vector<int8_t>> dcs;
         dcs.reserve(3);
-        std::vector<Matrix<std::vector<std::pair<signed char, unsigned char>>>> acs;
+        std::vector<Matrix<std::vector<std::pair<uint8_t, uint8_t>>>> acs;
         acs.reserve(3);
         for (const auto m_ptr : {&split_y, &split_cb, &split_cr}) {
             auto &m = *m_ptr;
@@ -381,14 +354,12 @@ private:
                 });
             /* clang-format on */
             std::vector<int8_t> dc(zigzaged.flattenToSpan().size());
-            int index = 0;
-            for (auto &x : zigzaged.flattenToSpan()) {
+            for (int i = 0; i < zigzaged.flattenToSpan().size(); i++) {
                 // dc 使用 差分
-                if (index != 0) {
-                    dc[index] = x[0] - dc[index - 1];  // de[index - 1] + dx[index] = x[0]
-                    index++;
+                if (i == 0) {
+                    dc[i] = zigzaged.flattenToSpan()[i][0];
                 } else {
-                    dc[index++] = x[0];
+                    dc[i] = zigzaged.flattenToSpan()[i][0] - zigzaged.flattenToSpan()[i - 1][0];
                 }
             }
 
@@ -396,69 +367,111 @@ private:
                                    return category(x);
                                });
 
-            auto ac = zigzaged.trans_convert([](const std::array<int16_t, 8 * 8> &arr) {
-                // run length encoding
-                std::vector<std::pair<int8_t, uint8_t>> rle;
-                int last_non_zero = 0;
-                for (int i = arr.size() - 1; i >= 0; i--) {
-                    if (arr[i] != 0) {
-                        last_non_zero = i;
-                        break;
-                    }
-                }
-                int cnt = 0;
-                // 從 1 開始 因為 dc 不編碼
-                for (int i = 1; i <= last_non_zero; i++) {
-                    if (arr[i] != 0 || cnt == 15) {
-                        // [run_len, size_for_bit], amp
-                        if (arr[i] == 0) {
-                            rle.emplace_back(static_cast<signed char>(0xF0), 0);
-                        } else {
-                            const int8_t size_for_bit = calculate_binary_size(abs_int8(arr[i]));
-                            rle.emplace_back(
-                                static_cast<int8_t>(cnt << 4 | size_for_bit), to_amplitude(arr[i], size_for_bit));
-                        }
-                        cnt = 0;
-                    } else {  // cnt < 15 and arr[i] == 0
-                        cnt++;
-                    }
-                }
-                rle.emplace_back(static_cast<int8_t>(0x00), 0);  // EOB -- end of block
-                return rle;
-            });
+            auto ac = zigzaged.trans_convert(calculate_rle);
 
             // TODO 這裡之後可以優化到 計算RLE的地方
-            /* clang-format off */
-            auto ac_merged = ac.flattenToSpan()
-                | std::views::join
-                | std::views::transform([](const std::pair<int8_t, int8_t> &rle_pair) {
-                        return rle_pair.first;
-                    });
-            /* clang-format on */
+            auto ac_merged = ac.flattenToSpan() | std::views::join | std::views::keys;
 
-            if (m_ptr == &split_y) {
-                y_dc.add(dc_category | std::ranges::to<std::vector>()).build();
-                HuffmanCoding<int8_t> ac_huffman;
-                y_ac.add(ac_merged | std::ranges::to<std::vector>()).build();
-            } else {
-                uv_dc.add(dc_category | std::ranges::to<std::vector>());
-                uv_ac.add(ac_merged | std::ranges::to<std::vector>());
-            }
             dcs.emplace_back(std::move(dc));
             acs.emplace_back(std::move(ac));
         }
+
+        return std::tuple{std::move(dcs), std::move(acs)};
+    }
+
+public:
+    static auto convert_dc_to_size_value(auto &dc) {
+        return dc | std::views::all | std::views::transform([](auto &x) {
+                   uint8_t value = 0;
+                   if (x >= 0) {
+                       value = x;
+                   } else {
+                       value = (1 << category(x)) - 1 + x;  // 正確的負數編碼
+                   }
+                   return std::pair<uint8_t, uint8_t>{category(x), value};  // size value
+               }) |
+               std::ranges::to<std::vector>();
+    }
+
+    static auto build_huffman_tree(std::vector<std::vector<signed char>> &dcs,
+                                   std::vector<Matrix<std::vector<std::pair<unsigned char, unsigned char>>>> &acs) {
+        Huffman_tree y_dc;
+        for (auto &[cat, value] : convert_dc_to_size_value(dcs[0])) {
+            y_dc.add_one(cat);
+        }
+        y_dc.build();
+        Huffman_tree y_ac;
+        for (auto &ac : acs[0].flattenToSpan()) {
+            for (auto &[first, value] : ac) {
+                y_ac.add_one(first);
+            }
+        }
+        y_ac.build();
+        ///////////////////////////////
+        /// CB CR
+        //////////////////////////////
+        Huffman_tree uv_dc;
+        for (auto &[cat, value] : convert_dc_to_size_value(dcs[1])) {
+            uv_dc.add_one(cat);
+        }
+        for (auto &[cat, value] : convert_dc_to_size_value(dcs[2])) {
+            uv_dc.add_one(cat);
+        }
         uv_dc.build();
+        ////////////////////
+        Huffman_tree uv_ac;
+        for (auto &ac : acs[1].flattenToSpan()) {
+            for (auto &[first, value] : ac) {
+                // if (first == 0) throw std::runtime_error("invalid huffman value");
+                uv_ac.add_one(first);
+            }
+        }
+        for (auto &ac : acs[2].flattenToSpan()) {
+            for (auto &[first, value] : ac) {
+                // if (first == 0) throw std::runtime_error("invalid huffman value");
+                uv_ac.add_one(first);
+            }
+        }
         uv_ac.build();
 
-        return std::tuple{
-            std::move(y_dc), std::move(y_ac), std::move(uv_dc), std::move(uv_ac), std::move(dcs), std::move(acs)};
+        return std::make_tuple(std::move(y_dc), std::move(y_ac), std::move(uv_dc), std::move(uv_ac));
+    }
+
+    static auto encode_huffman_dc(auto &dc, auto &huffman) {
+        // std::vector<int8_t>
+        std::vector<std::pair<bit_content, std::optional<bit_content>>> result;
+        for (auto &[cat, value] : convert_dc_to_size_value(dc)) {
+            auto enc = huffman.getMapping(cat);
+            auto val_len_pair = bit_content(enc.value, enc.length);
+            if (cat == 0) {
+                result.push_back({val_len_pair, std::nullopt});
+            } else {
+                result.push_back({val_len_pair, std::pair{value, cat}});
+            }
+        }
+        return result;
+    }
+
+    static auto encode_huffman_ac(auto &ac, auto &huffman) {
+        std::vector<std::pair<bit_content, std::optional<bit_content>>> result;
+        for (auto &[first, value] : ac) {
+            auto enc = huffman.getMapping(first);
+            auto val_len_pair = bit_content(enc.value, enc.length);
+            auto size = first & 0xFu;
+            if (size == 0) {
+                result.push_back({val_len_pair, std::nullopt});
+            } else {
+                result.push_back({val_len_pair, std::pair{value, size}});
+            }
+        }
+        return result;
     }
 
 private:
     template <int N, int M = N>
     static Matrix<Matrix<uint8_t>> split(Matrix<uint8_t> &mtx) {
-        const int row_sz = mtx.row() / N + (mtx.row() % N != 0);
-        const int col_sz = mtx.col() / M + (mtx.col() % M != 0);
+        const int row_sz = mtx.row() / N + int(mtx.row() % N != 0);
+        const int col_sz = mtx.col() / M + int(mtx.col() % M != 0);
         Matrix<Matrix<uint8_t>> result(row_sz, col_sz);
         for (int i = 0; i < row_sz; i++) {
             for (int j = 0; j < col_sz; j++) {
@@ -487,6 +500,7 @@ private:
     template <typename int_type>
         requires requires { sizeof(int_type) <= 2; }
     static int8_t calculate_binary_size(int_type x) {
+        if (x <= 0) throw std::runtime_error("binary size must be greater than zero");
         [[assume(x > 0)]];
 #ifdef _MSC_VER
         // lzcnt return leading zero => 0000 0000 1000 0000  return 8
@@ -497,7 +511,7 @@ private:
     }
 
 public:
-    static int8_t category(int16_t x) {
+    static uint8_t category(int16_t x) {
         if (x == 0) [[unlikely]] {
             return 0;
         }
@@ -509,7 +523,43 @@ public:
         if (val > 0) {
             return val;
         }
-        return (1 << size) - 1 - abs_int8(val);
+        return (1u << size) - 1 - abs_int8(val);
+    }
+
+    static std::vector<std::pair<uint8_t, uint8_t>> calculate_rle(const std::array<int16_t, 8 * 8> &arr) {
+        // run length encoding
+        std::vector<std::pair<uint8_t, uint8_t>> rle;
+        int last_non_zero = 0;
+        for (int i = arr.size() - 1; i >= 0; i--) {
+            if (arr[i] != 0) {
+                last_non_zero = i;
+                break;
+            }
+        }
+        int cnt = 0;
+        // 從 1 開始 因為 dc 不編碼
+        for (int i = 1; i <= last_non_zero; i++) {
+            if (arr[i] != 0 || cnt == 15) {
+                // [run_len, size_for_bit], amp
+                if (arr[i] == 0) {
+                    rle.emplace_back(0xF0, 0);
+                } else {
+                    const int8_t size_for_bit = calculate_binary_size(abs_int8(arr[i]));
+                    rle.emplace_back(unsigned(cnt) << 4 | size_for_bit, to_amplitude(arr[i], size_for_bit));
+                }
+                cnt = 0;
+            } else {  // cnt < 15 and arr[i] == 0
+                cnt++;
+            }
+        }
+        if (arr.back() == 0) {
+            rle.emplace_back(0x00, 0);  // EOB -- end of block
+        }
+        if (rle.size() > 63) {
+            throw std::runtime_error("mjaoiwdhbAO");
+        }
+        std::println("rle check {}", arr);
+        return rle;
     }
 
     template <int n>
@@ -568,6 +618,25 @@ public:
         {49, 64, 78, 87, 103, 121, 120, 101},
         {72, 92, 95, 98, 112, 100, 103, 99}};
 
+    /*DQT, Row #0:   2   1   1   2   3   5   6   7
+    DQT, Row #1:   1   1   2   2   3   7   7   7
+    DQT, Row #2:   2   2   2   3   5   7   8   7
+    DQT, Row #3:   2   2   3   3   6  10  10   7
+    DQT, Row #4:   2   3   4   7   8  13  12   9
+    DQT, Row #5:   3   4   7   8  10  12  14  11
+    DQT, Row #6:   6   8   9  10  12  15  14  12
+    DQT, Row #7:   9  11  11  12  13  12  12  12
+*/
+    // constexpr static std::array<std::array<uint8_t, 8>, 8> y_quantization_matrix = {
+    //     std::array<uint8_t, 8>{2, 1, 1, 2, 3, 5, 6, 7},
+    //     {1, 1, 2, 2, 3, 7, 7, 7},
+    //     {2, 2, 2, 3, 5, 7, 8, 7},
+    //     {2, 2, 3, 3, 6, 10, 10, 7},
+    //     {2, 3, 4, 7, 8, 13, 12, 9},
+    //     {3, 4, 7, 8, 10, 12, 14, 11},
+    //     {6, 8, 9, 10, 12, 15, 14, 12},
+    //     {9, 11, 11, 12, 13, 12, 12, 12}};
+
     constexpr static std::array<std::array<uint8_t, 8>, 8> uv_quantization_matrix = {
         std::array<uint8_t, 8>{17, 18, 24, 47, 99, 99, 99, 99},
         {18, 21, 26, 66, 99, 99, 99, 99},
@@ -577,7 +646,54 @@ public:
         {99, 99, 99, 99, 99, 99, 99, 99},
         {99, 99, 99, 99, 99, 99, 99, 99},
         {99, 99, 99, 99, 99, 99, 99, 99}};
+
+    /*  Precision=8 bits
+  Destination ID=1 (Chrominance)
+    DQT, Row #0:   2   2   3   6  12  12  12  12
+    DQT, Row #1:   2   3   3   8  12  12  12  12
+    DQT, Row #2:   3   3   7  12  12  12  12  12
+    DQT, Row #3:   6   8  12  12  12  12  12  12
+    DQT, Row #4:  12  12  12  12  12  12  12  12
+    DQT, Row #5:  12  12  12  12  12  12  12  12
+    DQT, Row #6:  12  12  12  12  12  12  12  12
+    DQT, Row #7:  12  12  12  12  12  12  12  12
+    Approx quality factor = 93.93 (scaling=12.14 variance*/
+
+    // constexpr static std::array<std::array<uint8_t, 8>, 8> uv_quantization_matrix = {
+    //     std::array<uint8_t, 8>{2, 2, 3, 6, 12, 12, 12, 12},
+    //     {2, 3, 3, 8, 12, 12, 12, 12},
+    //     {3, 3, 7, 12, 12, 12, 12, 12},
+    //     {6, 8, 12, 12, 12, 12, 12, 12},
+    //     {12, 12, 12, 12, 12, 12, 12, 12},
+    //     {12, 12, 12, 12, 12, 12, 12, 12},
+    //     {12, 12, 12, 12, 12, 12, 12, 12},
+    //     {12, 12, 12, 12, 12, 12, 12, 12}};
+    friend int main(int argc, char **argv);
+    friend int main();
+    friend void test_jpeg();
+    friend void test_rle(std::array<int16_t, 64> &arr);
 };
 }  // namespace f9ay
 
-// namespace f9ay::internal
+template <typename Char_T>
+struct std::formatter<f9ay::Jpeg::bit_content, Char_T> : std::formatter<std::string, Char_T> {
+    auto format(const f9ay::Jpeg::bit_content &coe, auto &ctx) const {
+        auto out = ctx.out();
+        out = std::format_to(out, "{}", f9ay::to_str(coe.value, coe.size));
+        return out;
+    }
+};
+
+template <typename T, typename Char_T>
+struct std::formatter<std::optional<T>, Char_T> : std::formatter<std::string, Char_T> {
+    auto format(const std::optional<T> &op, auto &ctx) const {
+        auto out = ctx.out();
+        if (op.has_value()) {
+            out = std::format_to(out, "{}", op.value());
+        } else {
+            out = std::format_to(out, "{{}}");
+        }
+
+        return out;
+    }
+};

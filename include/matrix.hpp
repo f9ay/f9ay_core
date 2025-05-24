@@ -205,12 +205,13 @@ public:
             for (int j = 0; j < col(); j++) {
                 if constexpr (std::is_integral_v<T>) {
                     // suppose compiler 會 idiv 優化
-                    auto tmp = (*this)[i, j] / other[i][j];
-                    if ((*this)[i, j] % other[i][j] >= other[i][j] / 2) {
-                        (*this)[i, j] = tmp + 1;
-                    } else {
-                        (*this)[i, j] = tmp;
-                    }
+                    // auto tmp = (*this)[i, j] / other[i][j];
+                    // if ((*this)[i, j] % other[i][j] >= other[i][j] / 2) {
+                    //     (*this)[i, j] = tmp + 1;
+                    // } else {
+                    //     (*this)[i, j] = tmp;
+                    // }
+                    (*this)[i, j] = std::round((*this)[i, j] / float(other[i][j]));
                 } else {  // 浮點 或 其他不管
                     (*this)[i, j] /= other[i][j];
                 }

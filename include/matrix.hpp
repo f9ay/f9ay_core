@@ -3,7 +3,9 @@
 #include <cstddef>
 #include <format>
 #include <iostream>
+#include <mdspan>
 #include <span>
+#include <utility>
 
 namespace f9ay {
 template <typename T>
@@ -171,6 +173,66 @@ public:
         return data;
     }
 
+    // TODO 用表達式模板優化
+    template <typename Func>
+    decltype(auto) transform(Func &&func) {
+#pragma loop(hint_parallel(0))
+        for (int i = 0; i < row(); i++) {
+            for (int j = 0; j < col(); j++) {
+                func(self()[i, j]);
+            }
+        }
+        return *this;
+    }
+
+    template <typename Func>
+    auto trans_convert(Func &&func) const {
+        // 不能 return reference
+        Matrix<std::decay_t<decltype(func((*this)[0, 0]))>> result(row(), col());
+#pragma loop(hint_parallel(0))
+        for (int i = 0; i < row(); i++) {
+            for (int j = 0; j < col(); j++) {
+                result[i, j] = func((*this)[i, j]);
+            }
+        }
+        return result;
+    }
+
+    template <typename U>
+    decltype(auto) round_div(const U &other) {
+#pragma loop(hint_parallel(0))
+        for (int i = 0; i < row(); i++) {
+            for (int j = 0; j < col(); j++) {
+                if constexpr (std::is_integral_v<T>) {
+                    // suppose compiler 會 idiv 優化
+                    // auto tmp = (*this)[i, j] / other[i][j];
+                    // if ((*this)[i, j] % other[i][j] >= other[i][j] / 2) {
+                    //     (*this)[i, j] = tmp + 1;
+                    // } else {
+                    //     (*this)[i, j] = tmp;
+                    // }
+                    (*this)[i, j] = std::round((*this)[i, j] / float(other[i][j]));
+                } else {  // 浮點 或 其他不管
+                    (*this)[i, j] /= other[i][j];
+                }
+            }
+        }
+        return *this;
+    }
+
+    decltype(auto) dump() {
+        println("{}", *this);
+        return *this;
+    }
+
+    decltype(auto) dump_abort() {
+        std::println("{}", *this);
+        abort();
+        return *this;
+    }
+
+    // lateinit
+    Matrix() : data(nullptr), rows(0), cols(0) {}
     Matrix(const int _rows, const int _cols) : rows(_rows), cols(_cols) {
         data = new T[rows * cols]{};
     }
@@ -180,9 +242,43 @@ public:
             data[i] = mtx.data[i];
         }
     }
-    Matrix &operator=(const Matrix &) = delete;
-    Matrix(Matrix &&other) noexcept
-        : data(other.data), rows(other.rows), cols(other.cols) {
+    Matrix &operator=(Matrix &&other) {
+        if (this == &other) {
+            return *this;
+        }
+        if (data != nullptr) {
+            std::println(
+                "warnning matrix 的移動 operator= 賦值給不是 lateinit 的 "
+                "matrix");
+            delete[] data;
+        }
+        data = other.data;
+        rows = other.rows;
+        cols = other.cols;
+        other.data = nullptr;
+        other.rows = 0;
+        other.cols = 0;
+        return *this;
+    }
+    Matrix &operator=(const Matrix &other) {
+        if (this == &other) {
+            return *this;
+        }
+        if (data != nullptr) {
+            std::println(
+                "warnning matrix 的複製 operator= 賦值給不是 lateinit 的 "
+                "matrix");
+            delete[] data;
+        }
+        rows = other.rows;
+        cols = other.cols;
+        std::copy(other.data, other.data + other.rows * other.cols, data);
+        return *this;
+    }
+    Matrix(Matrix &&other) noexcept : data(other.data), rows(other.rows), cols(other.cols) {
+        if (this == &other) {
+            return;
+        }
         other.data = nullptr;
         other.rows = 0;
         other.cols = 0;
@@ -199,6 +295,15 @@ public:
     }
     std::span<T> flattenToSpan() {
         return std::span<T>(data, rows * cols);
+    }
+    auto span() const {
+        return std::mdspan(data, rows, cols);
+    }
+
+    void swap(Matrix &other) noexcept {
+        std::swap(data, other.data);
+        std::swap(rows, other.rows);
+        std::swap(cols, other.cols);
     }
     /*
         {{1, 2, 3},
@@ -218,17 +323,15 @@ public:
         }
     }
 
-    Matrix(const std::span<T> &span, const int _rows, const int _cols)
-        : rows(_rows), cols(_cols) {
+    Matrix(const std::span<T> &span, const int _rows, const int _cols) : rows(_rows), cols(_cols) {
         data = new T[span.size()];
         std::copy(span.begin(), span.end(), data);
     }
 
-    Matrix(const T *data, const int _rows, const int _cols)
-        : rows(_rows), cols(_cols) {
-        this->data = new T[rows * cols];
-        std::copy(data, data + (rows * cols), this->data);
+    Matrix(std::vector<T> &&vec, const int _rows, const int _cols) : rows(_rows), cols(_cols) {
+        data = the_pointer_heist(vec);
     }
+
     ~Matrix() {
         delete[] data;
     }
@@ -236,6 +339,10 @@ public:
 private:
     T *data = nullptr;
     int rows, cols;
+
+    decltype(auto) self() {
+        return *this;
+    }
 };
 
 inline std::ostream &operator<<(std::ostream &os, const Matrix<int> &matrix) {
@@ -251,16 +358,23 @@ inline std::ostream &operator<<(std::ostream &os, const Matrix<int> &matrix) {
 };  // namespace f9ay
 
 template <typename T, typename Char_T>
-struct std::formatter<f9ay::Matrix<T>, Char_T>
-    : std::formatter<std::string, Char_T> {
+struct std::formatter<f9ay::Matrix<T>, Char_T> : std::formatter<std::string, Char_T> {
     auto format(const f9ay::Matrix<T> &matrix, auto &ctx) const {
         auto out = ctx.out();
+        out = std::format_to(
+            out,
+            "================================================="
+            "===============================\n");
         for (int i = 0; i < matrix.row(); i++) {
             for (int j = 0; j < matrix.col(); j++) {
                 out = std::format_to(out, "{} ", matrix[i][j]);
             }
             out = std::format_to(out, "\n");
         }
+        out = std::format_to(
+            out,
+            "================================================="
+            "===============================\n");
         return out;
     }
 };

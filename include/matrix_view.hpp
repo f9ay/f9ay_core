@@ -308,7 +308,7 @@ public:
     }
 };
 
-template <View_Type TYPE, typename Origin_Type, int Index>
+template <View_Type TYPE, typename Origin_Type, int Index = 0>
 class Matrix_view;
 
 template <typename Origin_Type>
@@ -346,6 +346,7 @@ public:
     }
 
     explicit Matrix_view(Matrix<Origin_Type> &_origin) : origin(&_origin) {}
+
 private:
     Matrix<Origin_Type> *origin = nullptr;
 };
@@ -386,6 +387,7 @@ public:
         return origin->col();
     }
     explicit Matrix_view(Matrix<Origin_Type> &_origin) : origin(&_origin) {}
+
 private:
     Matrix<Origin_Type> *origin = nullptr;
 };

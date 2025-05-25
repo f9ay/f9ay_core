@@ -1,9 +1,18 @@
 #pragma once
 #include <bit>
+#include <bitset>
 #include <cstddef>
 #include <vector>
 
 namespace f9ay {
+
+inline std::string to_str(uint32_t val, uint32_t len) {
+    std::string s = std::bitset<32>(val).to_string();
+    std::ranges::reverse(s);
+    s.resize(len);
+    std::ranges::reverse(s);
+    return s;
+}
 
 template <int N>
 concept PowerOf2 = (N & (N - 1)) == 0;
@@ -35,19 +44,18 @@ enum class WriteSequence {
     MSB,
     LSB,
 };
+
 class BitWriter {
 public:
     BitWriter() {
         _buffer.push_back(std::byte{0});
     }
 
-    BitWriter(const std::vector<std::byte>& buffer)
-        : _buffer(buffer), _bitPos(0) {
+    BitWriter(const std::vector<std::byte>& buffer) : _buffer(buffer), _bitPos(0) {
         _buffer.push_back(std::byte{0});
     }
 
-    BitWriter(std::byte* buffer, size_t size)
-        : _buffer(buffer, buffer + size), _bitPos(0) {
+    BitWriter(std::byte* buffer, size_t size) : _buffer(buffer, buffer + size), _bitPos(0) {
         _buffer.push_back(std::byte{0});
     }
 
@@ -73,6 +81,7 @@ public:
 
     template <typename T>
     void writeBitsFromMSB(T data, int count) {
+        // std::println("MSB {}", to_str(data, count));
         for (int i = count - 1; i >= 0; i--) {
             writeBit(static_cast<bool>((data >> i) & T{1}));
         }
@@ -85,8 +94,7 @@ public:
             if (_bitPos % 8 != 0 && needRevert) {
                 // revert the last byte
                 _buffer.back() = revertByteBits(_buffer.back());
-            } else if(_bitPos % 8 != 0 && !needRevert) {
-                
+            } else if (_bitPos % 8 != 0 && !needRevert) {
             }
         }
         _writeSequence = sequence;
@@ -114,4 +122,5 @@ private:
     // decide write from MSB or LSB
     WriteSequence _writeSequence = WriteSequence::MSB;
 };
+
 }  // namespace f9ay

@@ -22,14 +22,13 @@ struct RGBA {
 };
 
 struct YCbCr {
-    uint8_t y, cb, cr;
+    int32_t y, cb, cr;
 };
 
 template <typename T>
 concept color_type =
-    std::same_as<T, colors::RGB> || std::same_as<T, colors::BGR> ||
-    std::same_as<T, colors::RGBA> || std::same_as<T, colors::BGRA> ||
-    std::same_as<T, colors::YCbCr>;
+    std::same_as<T, colors::RGB> || std::same_as<T, colors::BGR> || std::same_as<T, colors::RGBA> ||
+    std::same_as<T, colors::BGRA> || std::same_as<T, colors::YCbCr>;
 
 template <color_type ColorType>
 int distance(const ColorType& l, const ColorType& r) {

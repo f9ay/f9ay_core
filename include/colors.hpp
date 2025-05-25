@@ -22,17 +22,16 @@ struct RGBA {
 };
 
 struct YCbCr {
-    uint8_t y, cb, cr;
+    int32_t y, cb, cr;
 };
 
 template <typename T>
 concept color_type =
-    std::same_as<T, colors::RGB> || std::same_as<T, colors::BGR> ||
-    std::same_as<T, colors::RGBA> || std::same_as<T, colors::BGRA> ||
-    std::same_as<T, colors::YCbCr>;
+    std::same_as<T, colors::RGB> || std::same_as<T, colors::BGR> || std::same_as<T, colors::RGBA> ||
+    std::same_as<T, colors::BGRA> || std::same_as<T, colors::YCbCr>;
 
 template <color_type ColorType>
-int abs (const ColorType& color) {
+int abs(const ColorType& color) {
     if constexpr (sizeof(ColorType) == 4) {
         auto [a, b, c, d] = color;
         return std::abs(a) + std::abs(b) + std::abs(c) + std::abs(d);
@@ -97,22 +96,18 @@ ColorType operator/(const ColorType& l, const ColorType& r) {
 }  // namespace f9ay::colors
 
 template <f9ay::colors::color_type ColorType, typename Char_T>
-struct std::formatter<ColorType, Char_T>
-    : std::formatter<std::string, Char_T> {
+struct std::formatter<ColorType, Char_T> : std::formatter<std::string, Char_T> {
     auto format(const ColorType& color, auto& ctx) const {
         if constexpr (sizeof(ColorType) == 4) {
             auto [a, b, c, d] = color;
-            return std::format_to(
-                ctx.out(), "({}, {}, {}, {})", a, b, c, d);
+            return std::format_to(ctx.out(), "({}, {}, {}, {})", a, b, c, d);
 
         } else {
             auto [a, b, c] = color;
-            return std::format_to(
-                ctx.out(), "({}, {}, {})", a, b, c);
+            return std::format_to(ctx.out(), "({}, {}, {})", a, b, c);
         }
     }
 };
-
 
 template <f9ay::colors::color_type ColorType>
 struct std::hash<ColorType> {
@@ -126,4 +121,3 @@ struct std::hash<ColorType> {
         }
     }
 };
-

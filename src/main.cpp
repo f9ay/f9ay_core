@@ -178,15 +178,7 @@ std::string convert_amp(uint32_t amp, uint32_t size) {
     return amp_str;
 }
 
-void test_rle(std::array<int16_t, 64>& arr) {
-    for (auto&& [r, amp] : Jpeg::calculate_rle(arr)) {
-        int len = r >> 4;
-        int size_for_bit = r & 0xFu;
-        std::string amp_str = convert_amp(amp, size_for_bit);
-        std::print("{{ {} {} }}", len, amp_str);
-    }
-    std::println("");
-}
+void test_rle(std::array<int16_t, 64>& arr) {}
 
 void test_dc_pair(std::vector<int8_t>& dc_test) {
     auto converted = Jpeg::convert_dc_to_size_value(dc_test);
@@ -263,7 +255,7 @@ int main(int argc, char** argv) {
     std::println("{}", Jpeg::category(1024));
     std::println("{}\n{}", std::bitset<16>(60).to_string(), std::bitset<16>(6).to_string());
     std::filesystem::path path = std::source_location::current().file_name();
-    path = path.parent_path().parent_path() / "test_data" / "1.bmp";
+    path = path.parent_path().parent_path() / "test_data" / "test.bmp";
     std::cout << path << std::endl;
     std::ifstream fs(path, std::ios::binary);
     if (!fs.is_open()) {
@@ -285,5 +277,11 @@ int main(int argc, char** argv) {
 
     std::ofstream out(path.parent_path() / "current.jpeg", std::ios::binary);
     out.write(reinterpret_cast<const char*>(buffer.get()), size);
+    out.close();
+    // 自己騙自己
+    using namespace std::literals;
+    auto current_jpeg = (path.parent_path().parent_path() / "test_data" / "current.jpeg").string();
+    auto output_jpeg = (path.parent_path().parent_path() / "test_data" / "out.jpeg").string();
+    std::system(("ffmpeg -i "s + current_jpeg + " " + output_jpeg).c_str());
     std::cout << "done" << std::endl;
 }

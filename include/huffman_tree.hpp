@@ -13,6 +13,9 @@
 struct huffman_coeff {
     uint16_t value;
     uint16_t length;
+    bool operator!=(const huffman_coeff& other) const {
+        return value != other.value || length != other.length;
+    }
 };
 
 template <typename Char_T>
@@ -61,10 +64,28 @@ public:
 
     node_ptr father_of_all = {-1};
 
+    enum class cls { DC, AC };
+
+    template <cls cl>
     void build() {
-        // for (int i = 0; i < 0xFFu; i++) {
-        //     ++freq_table[i];
-        // }
+        if constexpr (cl == cls::DC) {
+            for (int i = 0; i <= 11; i++) {
+                if (freq_table[i] == 0) {
+                    freq_table[i] = 0;
+                }
+            }
+        } else {
+            freq_table[0xFu << 4];
+            freq_table[0x0];
+            // for (uint32_t rl = 0; rl <= 15; rl++) {
+            //     for (uint32_t size = 0; size <= 10; size++) {  // sz max is 10
+            //         uint32_t index = rl << 4u | size;
+            //         if (freq_table[index] == 0) {
+            //             freq_table[index] = 0;
+            //         }
+            //     }
+            // }
+        }
 
         std::println("freq check {}", freq_table);
 
@@ -159,10 +180,10 @@ public:
         for (auto& [val, len] : standard_table | std::views::drop(1)) {
             result[val].length = len;
             current += 1;
-            if (len > current_len) {
+            while (len > current_len) {
                 current <<= 1;
+                current_len += 1;
             }
-            current_len = len;
             result[val].value = current;
         }
 
@@ -172,6 +193,71 @@ public:
 
     huffman_coeff getMapping(uint16_t value) {
         return get_standard_huffman_mapping().at(value);
+    }
+
+    void validate() {
+        std::array<uint8_t, 16> bits_array{};
+        auto& standard_huffman_table = get_standard_huffman_table();
+        std::println("standard_huffman_table : {}", standard_huffman_table);
+
+        for (const auto& [val, len] : standard_huffman_table) {
+            bits_array[len - 1]++;
+        }
+
+        std::vector<uint32_t> huff_symbols;
+        for (const auto& [val, len] : standard_huffman_table) {
+            huff_symbols.push_back(val);
+        }
+
+        std::unordered_map<int, huffman_coeff> symbol_to_code;
+
+        int first_len_idx = -1;
+        for (int j = 0; j < bits_array.size(); ++j) {
+            if (bits_array[j] != 0) {
+                first_len_idx = j;
+                break;
+            }
+        }
+        if (first_len_idx == -1) {
+            throw std::runtime_error("No symbols in Huffman table with non-zero length.");
+        }
+
+        int current_code = 0;
+        int current_len = first_len_idx + 1;
+
+        symbol_to_code[huff_symbols[0]] = huffman_coeff(current_code, current_len);
+
+        for (size_t i = 1; i < huff_symbols.size(); ++i) {
+            int next_len = 0;
+            int remaining_count = i + 1;
+
+            for (int j = 0; j < bits_array.size(); ++j) {
+                if (remaining_count <= bits_array[j]) {
+                    next_len = j + 1;
+                    break;
+                }
+                remaining_count -= bits_array[j];
+            }
+
+            current_code++;
+
+            if (next_len > current_len) {
+                current_code <<= (next_len - current_len);
+                current_len = next_len;
+            }
+
+            symbol_to_code[huff_symbols[i]] = huffman_coeff(current_code, current_len);
+        }
+
+        // validate
+        for (auto& [symbol, code] : symbol_to_code) {
+            huffman_coeff c = code;
+            if (getMapping(symbol) != c) {
+                std::println("Mismatch for symbol {}: Expected (value={}, length={}), Got (value={}, length={})",
+                             symbol, getMapping(symbol).value, getMapping(symbol).length, c.value, c.length);
+                throw std::runtime_error("huffman validate failed");
+            }
+        }
     }
 
     void dfs(int index, int depth) {

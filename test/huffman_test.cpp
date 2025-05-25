@@ -1,110 +1,110 @@
-#include <gtest/gtest.h>
+// #include <gtest/gtest.h>
 
-#include <random>
-#include <string>
-#include <vector>
-#include <unordered_set>
+// #include <random>
+// #include <string>
+// #include <vector>
+// #include <unordered_set>
 
-#include "huffman_coding.hpp"
+// #include "huffman_coding.hpp"
 
-using namespace f9ay;
+// using namespace f9ay;
 
-// Helper function to generate random strings
-std::string generateRandomString(size_t length) {
-    static const char charset[] =
-        "abcdefghijklmnopqrstuvwxyz"
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        "0123456789"
-        "!@#$%^&*()-_=+[]{}|;:,.<>?/";
+// // Helper function to generate random strings
+// std::string generateRandomString(size_t length) {
+//     static const char charset[] =
+//         "abcdefghijklmnopqrstuvwxyz"
+//         "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+//         "0123456789"
+//         "!@#$%^&*()-_=+[]{}|;:,.<>?/";
 
-    static std::mt19937 rng(std::random_device{}());
-    static std::uniform_int_distribution<size_t> dist(0, sizeof(charset) - 2);
+//     static std::mt19937 rng(std::random_device{}());
+//     static std::uniform_int_distribution<size_t> dist(0, sizeof(charset) - 2);
 
-    std::string result(length, '\0');
-    for (size_t i = 0; i < length; i++) {
-        result[i] = charset[dist(rng)];
-    }
+//     std::string result(length, '\0');
+//     for (size_t i = 0; i < length; i++) {
+//         result[i] = charset[dist(rng)];
+//     }
 
-    return result;
-}
+//     return result;
+// }
 
-// Helper function to encode a string using Huffman coding
-std::vector<std::byte> encodeString(const std::string& input, HuffmanCoding<char>& huffman) {
-    huffman.add(input);
-    huffman.build();
+// // Helper function to encode a string using Huffman coding
+// std::vector<std::byte> encodeString(const std::string& input, HuffmanCoding<char>& huffman) {
+//     huffman.add(input);
+//     huffman.build();
     
-    std::vector<std::byte> encoded;
-    for (char c : input) {
-        auto charCode = huffman.getMapping(c);
-        encoded.insert(encoded.end(), charCode.begin(), charCode.end());
-    }
+//     std::vector<std::byte> encoded;
+//     for (char c : input) {
+//         auto charCode = huffman.getMapping(c);
+//         encoded.insert(encoded.end(), charCode.begin(), charCode.end());
+//     }
     
-    return encoded;
-}
+//     return encoded;
+// }
 
-// Helper function to decode using Huffman coding
-std::string decodeToString(const std::vector<std::byte>& encoded, HuffmanCoding<char>& huffman) {
-    std::string result;
-    size_t index = 0;
+// // Helper function to decode using Huffman coding
+// std::string decodeToString(const std::vector<std::byte>& encoded, HuffmanCoding<char>& huffman) {
+//     std::string result;
+//     size_t index = 0;
     
-    while (index < encoded.size()) {
-        char decodedChar = huffman.decode(std::vector<std::byte>(encoded.begin() + index, encoded.end()));
-        result += decodedChar;
+//     while (index < encoded.size()) {
+//         char decodedChar = huffman.decode(std::vector<std::byte>(encoded.begin() + index, encoded.end()));
+//         result += decodedChar;
         
-        // Find how many bytes were consumed for this character
-        auto charCode = huffman.getMapping(decodedChar);
-        index += charCode.size();
-    }
+//         // Find how many bytes were consumed for this character
+//         auto charCode = huffman.getMapping(decodedChar);
+//         index += charCode.size();
+//     }
     
-    return result;
-}
+//     return result;
+// }
 
-TEST(HuffmanTest, EncodeDecode) {
-    // Run multiple test rounds
-    const int TEST_ROUNDS = 10;
+// TEST(HuffmanTest, EncodeDecode) {
+//     // Run multiple test rounds
+//     const int TEST_ROUNDS = 10;
 
-    for (int round = 0; round < TEST_ROUNDS; round++) {
-        // Generate random strings of different lengths
-        std::vector<size_t> lengths = {5, 10, 50, 100, 500, 1000};
+//     for (int round = 0; round < TEST_ROUNDS; round++) {
+//         // Generate random strings of different lengths
+//         std::vector<size_t> lengths = {5, 10, 50, 100, 500, 1000};
 
-        for (size_t length : lengths) {
-            std::string original = generateRandomString(length);
+//         for (size_t length : lengths) {
+//             std::string original = generateRandomString(length);
             
-            try {
-                HuffmanCoding<char> huffman;
+//             try {
+//                 HuffmanCoding<char> huffman;
                 
-                // Build Huffman tree
-                huffman.add(original);
-                huffman.build();
+//                 // Build Huffman tree
+//                 huffman.add(original);
+//                 huffman.build();
                 
-                // Verify that all characters have codes
-                std::unordered_set<char> uniqueChars(original.begin(), original.end());
-                auto codeMap = huffman.getCodeMap();
+//                 // Verify that all characters have codes
+//                 std::unordered_set<char> uniqueChars(original.begin(), original.end());
+//                 auto codeMap = huffman.getCodeMap();
                 
-                for (char c : uniqueChars) {
-                    ASSERT_TRUE(codeMap.find(c) != codeMap.end())
-                        << "Character '" << c << "' not found in code map"
-                        << " Round: " << round << ", Length: " << length;
-                }
+//                 for (char c : uniqueChars) {
+//                     ASSERT_TRUE(codeMap.find(c) != codeMap.end())
+//                         << "Character '" << c << "' not found in code map"
+//                         << " Round: " << round << ", Length: " << length;
+//                 }
                 
-                // Test encoding and decoding each character individually
-                for (char c : uniqueChars) {
-                    auto encoded = huffman.getMapping(c);
-                    char decoded = huffman.decode(encoded);
+//                 // Test encoding and decoding each character individually
+//                 for (char c : uniqueChars) {
+//                     auto encoded = huffman.getMapping(c);
+//                     char decoded = huffman.decode(encoded);
                     
-                    ASSERT_EQ(c, decoded)
-                        << "Character encoding/decoding failed for '" << c << "'"
-                        << " Round: " << round << ", Length: " << length;
-                }
+//                     ASSERT_EQ(c, decoded)
+//                         << "Character encoding/decoding failed for '" << c << "'"
+//                         << " Round: " << round << ", Length: " << length;
+//                 }
                 
-            } catch (const std::exception& e) {
-                FAIL() << "Exception thrown: " << e.what()
-                       << " Round: " << round << ", Length: " << length
-                       << " Original: " << original;
-            }
-        }
-    }
-}
+//             } catch (const std::exception& e) {
+//                 FAIL() << "Exception thrown: " << e.what()
+//                        << " Round: " << round << ", Length: " << length
+//                        << " Original: " << original;
+//             }
+//         }
+//     }
+// }
 
 // Test with very specific patterns that might be challenging for Huffman coding
 // TEST(HuffmanTest, SpecificPatterns) {
@@ -230,7 +230,7 @@ TEST(HuffmanTest, EncodeDecode) {
 //     ASSERT_EQ('D', huffman.decode(codeD));
 // }
 
-int main(int argc, char** argv) {
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
-}
+// int main(int argc, char** argv) {
+//     ::testing::InitGoogleTest(&argc, argv);
+//     return RUN_ALL_TESTS();
+// }

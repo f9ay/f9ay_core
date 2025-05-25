@@ -183,7 +183,7 @@ public:
     void validate() {
         std::array<uint8_t, 16> bits_array{};
         auto& standard_huffman_table = get_standard_huffman_table();
-        std::println("standard_huffman_table : {}", standard_huffman_table);
+        // std::println("standard_huffman_table : {}", standard_huffman_table);
 
         for (const auto& [val, len] : standard_huffman_table) {
             bits_array[len - 1]++;

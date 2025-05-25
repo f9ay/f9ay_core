@@ -59,21 +59,13 @@ using namespace f9ay;
 //     /////////////////////////////
 //     std::println("====================");
 //     auto mtx2 = Matrix<std::array<int, 3>>(3, 3);
-<<<<<<< HEAD
 //
-=======
-
->>>>>>> 3d066d7 (let it compilable on gcc)
 //     for (int i = 0; i < 3; i++) {
 //         for (int j = 0; j < 3; j++) {
 //             mtx2[i, j][2] = -3;
 //         }
 //     }
-<<<<<<< HEAD
 //
-=======
-
->>>>>>> 3d066d7 (let it compilable on gcc)
 //     auto view2 = Matrix_view(mtx2, 2);
 //     for (int i = 0; i < 3; i++) {
 //         for (int j = 0; j < 3; j++) {
@@ -81,11 +73,7 @@ using namespace f9ay;
 //         }
 //         std::cout << std::endl;
 //     }
-<<<<<<< HEAD
 //
-=======
-
->>>>>>> 3d066d7 (let it compilable on gcc)
 //     std::println("====================");
 //     /*
 //     [  [16,  11,  10,  16,  24,  40,  51,  61],
@@ -182,21 +170,31 @@ using namespace f9ay;
 //     return 0;
 // }
 
-#include <stacktrace>
+std::string convert_amp(uint32_t amp, uint32_t size) {
+    std::string amp_str = std::bitset<16>(amp).to_string();
+    std::ranges::reverse(amp_str);
+    amp_str.resize(size);
+    std::ranges::reverse(amp_str);
+    return amp_str;
+}
 
-void msvc_terminate_handler() {
-    std::cout << std::stacktrace::current() << '\n';
-    auto exception_ptr = std::current_exception();
-    try {
-        if (exception_ptr) {
-            std::rethrow_exception(exception_ptr);
-        }
-    } catch (const std::exception& e) {
-        std::println(stderr, "Unhandled exception:\ntype : {}\nwhat: {}", typeid(e).name(), e.what());
-    } catch (...) {
-        std::println(stderr, "Unknown exception occurred");
+void test_rle(std::array<int16_t, 64>& arr) {}
+
+void test_dc_pair(std::vector<int8_t>& dc_test) {
+    auto converted = Jpeg::convert_dc_to_size_value(dc_test);
+    for (auto& [size, value] : converted) {
+        std::string amp_str = convert_amp(value, size);
+        std::print("{{ {} {} }}", size, amp_str);
     }
-    std::abort();
+    std::println("=======================");
+}
+
+void test_jpeg() {
+    std::vector<int8_t> dc_test_1 = {0, 1, 2, 3, 4, 5, 6, 7, 8, 77};
+    test_dc_pair(dc_test_1);
+
+    std::vector<int8_t> dc_test_2 = {0, -1, -2, -3, -4, -5, -6, -7, -8, -77};
+    test_dc_pair(dc_test_2);
 }
 
 int main(int argc, char** argv) {
@@ -222,14 +220,11 @@ int main(int argc, char** argv) {
             mtx[i, j].g = res[i, j].g;
             mtx[i, j].b = res[i, j].b;
         }
-    std::unique_ptr<std::byte[]> buffer;
-    size_t sz;
+    }
     std::visit(
-        [&buffer, &sz, &path](auto&& arg) {
-            std::tie(buffer, sz) = Bmp::write(arg);
+        [ &path](auto&& arg) {
 
-            std::ofstream out(path.parent_path() / "test.png",
-                              std::ios::binary);
+            std::ofstream out(path.parent_path() / "test.png", std::ios::binary);
 
             auto flattend = arg.flattenToSpan();
 
@@ -238,17 +233,12 @@ int main(int argc, char** argv) {
         },
         result);
 
-    Matrix<colors::BGR> mtx(3, 3);
-
-    std::ofstream out(path.parent_path() / "fire_converted.bmp",
-                      std::ios::binary);
-
     std::string test = "AAAAAAAAAAAAAAAAAAAA";
 
     auto vec = LZ77::lz77EncodeSlow(test);
     for (auto [offset, length, value] : vec) {
-        std::cout << "Offset: " << offset << ", Length: " << length
-                  << ", Value: " << (value.has_value() ? *value : ' ') << "\n";
+        std::cout << "Offset: " << offset << ", Length: " << length << ", Value: " << (value.has_value() ? *value : ' ')
+                  << "\n";
     }
     auto [buffer, size] = Jpeg::write(mtx);
 

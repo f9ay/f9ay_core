@@ -52,7 +52,7 @@ private:
         uint8_t extraBitLength;
     };
 
-    static constexpr auto _buildFixedHuffmanTable() {
+    static consteval auto _buildFixedHuffmanTable() {
         std::array<FixedHuffmanCode, 288> fixedHuffmanCodesTable{};
 
         for (int i = 0; i < 144; i++) {

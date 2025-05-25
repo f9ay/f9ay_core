@@ -3,9 +3,9 @@
 #include <cstddef>
 #include <format>
 #include <iostream>
-#include <mdspan>
 #include <span>
 #include <utility>
+#include <cmath>
 
 namespace f9ay {
 template <typename T>
@@ -296,9 +296,6 @@ public:
     std::span<T> flattenToSpan() {
         return std::span<T>(data, rows * cols);
     }
-    auto span() const {
-        return std::mdspan(data, rows, cols);
-    }
 
     void swap(Matrix &other) noexcept {
         std::swap(data, other.data);
@@ -330,6 +327,11 @@ public:
 
     Matrix(std::vector<T> &&vec, const int _rows, const int _cols) : rows(_rows), cols(_cols) {
         data = the_pointer_heist(vec);
+    }
+
+    Matrix(const T *data, const int _rows, const int _cols) : rows(_rows), cols(_cols) {
+        this->data = new T[rows * cols];
+        std::copy(data, data + (rows * cols), this->data);
     }
 
     ~Matrix() {

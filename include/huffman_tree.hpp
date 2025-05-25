@@ -162,11 +162,15 @@ public:
             }
             return a.second < b.second;
         });
+
         // 校正全 1
         uint16_t current = 0;
         uint16_t current_len = table[0].second;
 
-        // 我的超人 https://www.v2ex.com/t/845486
+        /* 我的超人 https://www.v2ex.com/t/845486 */
+        /* 感謝您  mikewang  */
+        /* 太強了 */
+        /* 🧎🧎🧎🧎🧎🧎 */
         for (auto& [val, len] : table | std::views::drop(1)) {
             current += 1;
             while (len > current_len) {
@@ -194,7 +198,6 @@ public:
         uint16_t current = 0;
         uint16_t current_len = standard_table[0].second;
 
-        // 我的超人 https://www.v2ex.com/t/845486
         for (auto& [val, len] : standard_table | std::views::drop(1)) {
             current += 1;
             while (len > current_len) {

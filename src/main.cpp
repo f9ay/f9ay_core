@@ -45,11 +45,8 @@ int main(int argc, char** argv) {
             mtx[i, j].b = res[i, j].b;
         }
     }
-    std::unique_ptr<std::byte[]> buffer;
-    size_t sz;
     std::visit(
-        [&buffer, &sz, &path](auto&& arg) {
-            std::tie(buffer, sz) = Bmp::write(arg);
+        [ &path](auto&& arg) {
 
             std::ofstream out(path.parent_path() / "test.png", std::ios::binary);
 

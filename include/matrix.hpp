@@ -7,6 +7,7 @@
 #include <print>
 #include <span>
 #include <utility>
+#include <cmath>
 
 namespace f9ay {
 template <typename T>

@@ -233,4 +233,8 @@
 // int main(int argc, char** argv) {
 //     ::testing::InitGoogleTest(&argc, argv);
 //     return RUN_ALL_TESTS();
+<<<<<<< HEAD
 // }
+=======
+// }
+>>>>>>> 825a798 (let gcc compilable)

@@ -188,14 +188,15 @@ public:
                                       static_cast<int>(std::distance(
                                           bufferBegin, container.end()))});
                         auto [dictMatchEnd, lookheadEnd] = std::mismatch(
-                            dictMatchbegin, dictMatchbegin + maxPossibleLength, bufferBegin,
-                            bufferBegin + maxPossibleLength);
+                            dictMatchbegin, dictMatchbegin + maxPossibleLength,
+                            bufferBegin, bufferBegin + maxPossibleLength);
 
-                        int length = std::distance(dictMatchbegin, dictMatchEnd);
+                        int length =
+                            std::distance(dictMatchbegin, dictMatchEnd);
                         if (length > maxLength) {
                             maxLength = length;
                             offset = std::distance(dictMatchbegin, bufferBegin);
-                            maxMatchEnd = lookheadEnd; 
+                            maxMatchEnd = lookheadEnd;
                         }
                     }
 

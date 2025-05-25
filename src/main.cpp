@@ -59,13 +59,21 @@ using namespace f9ay;
 //     /////////////////////////////
 //     std::println("====================");
 //     auto mtx2 = Matrix<std::array<int, 3>>(3, 3);
+<<<<<<< HEAD
 //
+=======
+
+>>>>>>> 3d066d7 (let it compilable on gcc)
 //     for (int i = 0; i < 3; i++) {
 //         for (int j = 0; j < 3; j++) {
 //             mtx2[i, j][2] = -3;
 //         }
 //     }
+<<<<<<< HEAD
 //
+=======
+
+>>>>>>> 3d066d7 (let it compilable on gcc)
 //     auto view2 = Matrix_view(mtx2, 2);
 //     for (int i = 0; i < 3; i++) {
 //         for (int j = 0; j < 3; j++) {
@@ -73,7 +81,11 @@ using namespace f9ay;
 //         }
 //         std::cout << std::endl;
 //     }
+<<<<<<< HEAD
 //
+=======
+
+>>>>>>> 3d066d7 (let it compilable on gcc)
 //     std::println("====================");
 //     /*
 //     [  [16,  11,  10,  16,  24,  40,  51,  61],
@@ -85,7 +97,6 @@ using namespace f9ay;
 //     [49,  64,  78,  87, 103, 121, 120, 101],
 //     [72,  92,  95,  98, 112, 100, 103,  99] ]
 //     */
-//
 //     Matrix<float> mtx3 = {{16, 11, 10, 16, 24, 40, 51, 61},
 //                           {12, 12, 14, 19, 26, 58, 60, 55},
 //                           {14, 13, 16, 24, 40, 57, 69, 56},
@@ -95,15 +106,15 @@ using namespace f9ay;
 //                           {49, 64, 78, 87, 103, 121, 120, 101},
 //                           {72, 92, 95, 98, 112, 100, 103, 99}};
 //     const auto view3 = Matrix_view(mtx3);
-//
+
 //     auto result = Dct<8, 8>::dct(view3);
-//
+
 //     std::println("{}", result);
-//
+
 //     std::println("======================================");
-//
+
 //     Matrix<float> mtx4(8, 8);
-//
+
 //     for (auto x : mtx4) {
 //         for (auto& y : x) {
 //             y = 128;
@@ -200,6 +211,7 @@ int main(int argc, char** argv) {
         std::cerr << "Failed to open file" << std::endl;
         return 1;
     }
+
     const auto file = readFile(fs);
     auto result = Bmp::import(file.get());
     auto res = std::get<Matrix<colors::BGR>>(result);
@@ -220,51 +232,9 @@ int main(int argc, char** argv) {
                               std::ios::binary);
 
             auto flattend = arg.flattenToSpan();
-            std::vector<std::byte> pixelBytes;
-            for (const auto& pixel : flattend) {
-                // 將像素轉換為字節序列
-                auto* bytePtr = reinterpret_cast<const std::byte*>(&pixel);
-                pixelBytes.insert(pixelBytes.end(), bytePtr,
-                                  bytePtr + sizeof(pixel));
-            }
 
-            HuffmanCoding<std::byte> huffman;
-
-            huffman.add(pixelBytes);
-
-            huffman.build();
-
-            // check if encode and decode works
-            auto codeMap = huffman.getCodeMap();
-
-            for (const auto& [key, value] : codeMap) {
-                std::cout << "Key: " << int(key) << ", Value: ";
-                for (const auto& byte : value) {
-                    std::cout << int(byte) << " ";
-                }
-                std::cout << std::endl;
-            }
-
-            std::vector<std::vector<std::byte>> encodedData;
-            for (const auto& pixel : pixelBytes) {
-                auto encoded = huffman.getMapping(pixel);
-                encodedData.push_back(encoded);
-            }
-
-            // check if the encoded data is correct
-
-            for (int i = 0; i < pixelBytes.size(); i++) {
-                auto decoded = huffman.decode(encodedData[i]);
-                if (decoded != pixelBytes[i]) {
-                    std::cerr << "Decoded data is not equal to original data "
-                                 "at index "
-                              << i << std::endl;
-                    return;
-                }
-            }
-
-            // auto [buffer, size] = PNG::exportToByte(arg, FilterType::Sub);
-            // out.write(reinterpret_cast<const char*>(buffer.get()), size);
+            auto [buffer, size] = PNG::exportToByte(arg, FilterType::Sub);
+            out.write(reinterpret_cast<const char*>(buffer.get()), size);
         },
         result);
 

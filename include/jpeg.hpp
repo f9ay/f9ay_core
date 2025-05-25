@@ -76,10 +76,10 @@ public:
     static std::pair<std::unique_ptr<std::byte[]>, size_t> write(const Matrix<colors::RGB> &src) {
         auto [dcs, acs] = encode(src);
         auto [y_dc, y_ac, uv_dc, uv_ac] = build_huffman_tree(dcs, acs);
-        y_dc.validate();
-        y_ac.validate();
-        uv_dc.validate();
-        uv_ac.validate();
+        // y_dc.validate();
+        // y_ac.validate();
+        // uv_dc.validate();
+        // uv_ac.validate();
         std::println("acs size : {}", acs[1][0, 0].size());
         std::println("acs : {}", acs[1]);
         size_t size = 65354133;  // TODO

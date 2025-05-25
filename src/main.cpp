@@ -278,11 +278,4 @@ int main(int argc, char** argv) {
 
     std::ofstream out(path.parent_path() / "current.jpeg", std::ios::binary);
     out.write(reinterpret_cast<const char*>(buffer.get()), size);
-    out.close();
-    // 自己騙自己
-    using namespace std::literals;
-    auto current_jpeg = (path.parent_path().parent_path() / "test_data" / "current.jpeg").string();
-    auto output_jpeg = (path.parent_path().parent_path() / "test_data" / "out.jpeg").string();
-    std::system(("ffmpeg -i "s + current_jpeg + " " + output_jpeg).c_str());
-    std::cout << "done" << std::endl;
 }

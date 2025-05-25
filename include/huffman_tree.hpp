@@ -162,6 +162,22 @@ public:
             }
             return a.second < b.second;
         });
+        // 校正全 1
+        uint16_t current = 0;
+        uint16_t current_len = table[0].second;
+
+        // 我的超人 https://www.v2ex.com/t/845486
+        for (auto& [val, len] : table | std::views::drop(1)) {
+            current += 1;
+            while (len > current_len) {
+                current <<= 1;
+                current_len += 1;
+            }
+            if (std::popcount(current) == current_len) {
+                len++;
+            }
+        }
+
         standard_huffman_table = std::move(table);
         return standard_huffman_table.value();
     }
@@ -177,13 +193,15 @@ public:
         result[standard_table[0].first] = huffman_coeff(0, standard_table[0].second);
         uint16_t current = 0;
         uint16_t current_len = standard_table[0].second;
+
+        // 我的超人 https://www.v2ex.com/t/845486
         for (auto& [val, len] : standard_table | std::views::drop(1)) {
-            result[val].length = len;
             current += 1;
             while (len > current_len) {
                 current <<= 1;
                 current_len += 1;
             }
+            result[val].length = len;
             result[val].value = current;
         }
 

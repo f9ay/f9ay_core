@@ -327,6 +327,11 @@ public:
         data = new T[span.size()];
         std::copy(span.begin(), span.end(), data);
     }
+
+    Matrix(std::vector<T> &&vec, const int _rows, const int _cols) : rows(_rows), cols(_cols) {
+        data = the_pointer_heist(vec);
+    }
+
     ~Matrix() {
         delete[] data;
     }

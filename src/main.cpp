@@ -46,13 +46,15 @@ int main(int argc, char** argv) {
         }
     }
     std::visit(
-        [ &path](auto&& arg) {
+        [&path](auto&& arg) {
 
             std::ofstream out(path.parent_path() / "test.png", std::ios::binary);
 
-            auto flattend = arg.flattenToSpan();
+            auto rgbMtx = arg.trans_convert([](const auto& color)  {
+                return colors::color_cast<colors::RGB>(color);
+            });
 
-            auto [buffer, size] = PNG::exportToByte(arg, FilterType::Sub);
+            auto [buffer, size] = PNG::exportToByte(rgbMtx, FilterType::Sub);
             out.write(reinterpret_cast<const char*>(buffer.get()), size);
         },
         result);

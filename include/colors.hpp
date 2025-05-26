@@ -4,7 +4,6 @@
 #include <tuple>
 
 namespace f9ay::colors {
-
 struct BGR {
     uint8_t b, g, r;
 };
@@ -55,13 +54,12 @@ ColorType operator+(const ColorType& l, const ColorType& r) {
     if constexpr (sizeof(ColorType) == 4) {
         auto [a, b, c, d] = l;
         auto [e, f, g, h] = r;
-        return {static_cast<uint8_t>(a + e), static_cast<uint8_t>(b + f),
-                static_cast<uint8_t>(c + g), static_cast<uint8_t>(d + h)};
+        return {static_cast<uint8_t>(a + e), static_cast<uint8_t>(b + f), static_cast<uint8_t>(c + g),
+                static_cast<uint8_t>(d + h)};
     } else {
         auto [a, b, c] = l;
         auto [e, f, g] = r;
-        return {static_cast<uint8_t>(a + e), static_cast<uint8_t>(b + f),
-                static_cast<uint8_t>(c + g)};
+        return {static_cast<uint8_t>(a + e), static_cast<uint8_t>(b + f), static_cast<uint8_t>(c + g)};
     }
 }
 
@@ -70,13 +68,12 @@ ColorType operator-(const ColorType& l, const ColorType& r) {
     if constexpr (sizeof(ColorType) == 4) {
         auto [a, b, c, d] = l;
         auto [e, f, g, h] = r;
-        return {static_cast<uint8_t>(a - e), static_cast<uint8_t>(b - f),
-                static_cast<uint8_t>(c - g), static_cast<uint8_t>(d - h)};
+        return {static_cast<uint8_t>(a - e), static_cast<uint8_t>(b - f), static_cast<uint8_t>(c - g),
+                static_cast<uint8_t>(d - h)};
     } else {
         auto [a, b, c] = l;
         auto [e, f, g] = r;
-        return {static_cast<uint8_t>(a - e), static_cast<uint8_t>(b - f),
-                static_cast<uint8_t>(c - g)};
+        return {static_cast<uint8_t>(a - e), static_cast<uint8_t>(b - f), static_cast<uint8_t>(c - g)};
     }
 }
 
@@ -110,16 +107,27 @@ template <color_type ColorType>
 ColorType operator/(const ColorType& l, int r) {
     if constexpr (sizeof(ColorType) == 4) {
         auto [a, b, c, d] = l;
-        return {static_cast<uint8_t>(a / r), static_cast<uint8_t>(b / r),
-                static_cast<uint8_t>(c / r), static_cast<uint8_t>(d / r)};
+        return {static_cast<uint8_t>(a / r), static_cast<uint8_t>(b / r), static_cast<uint8_t>(c / r),
+                static_cast<uint8_t>(d / r)};
     } else {
         auto [a, b, c] = l;
-        return {static_cast<uint8_t>(a / r), static_cast<uint8_t>(b / r),
-                static_cast<uint8_t>(c / r)};
+        return {static_cast<uint8_t>(a / r), static_cast<uint8_t>(b / r), static_cast<uint8_t>(c / r)};
     }
 }
-}  // namespace f9ay::colors
+template <color_type TargetColorType, color_type SourceColorType>
+TargetColorType color_cast(const SourceColorType& color) {
+    TargetColorType result;
 
+    result.r = color.r;
+    result.g = color.g;
+    result.b = color.b;
+    if constexpr (requires { color.a; } && requires { result.a; }) {
+        result.a = color.a;  // Assuming SourceColorType has an alpha channel
+    }
+
+    return result;
+}
+}  // namespace f9ay::colors
 template <f9ay::colors::color_type ColorType, typename Char_T>
 struct std::formatter<ColorType, Char_T> : std::formatter<std::string, Char_T> {
     auto format(const ColorType& color, auto& ctx) const {

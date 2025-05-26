@@ -166,11 +166,10 @@ public:
                             std::min({maxMatchLen, static_cast<int>(std::distance(dictMatchbegin, container.end())),
                                       static_cast<int>(std::distance(bufferBegin, container.end()))});
                         auto [dictMatchEnd, lookheadEnd] = std::mismatch(
-                            dictMatchbegin, dictMatchbegin + maxPossibleLength,
-                            bufferBegin, bufferBegin + maxPossibleLength);
+                            dictMatchbegin, dictMatchbegin + maxPossibleLength, bufferBegin,
+                            bufferBegin + maxPossibleLength);
 
-                        int length =
-                            std::distance(dictMatchbegin, dictMatchEnd);
+                        int length = std::distance(dictMatchbegin, dictMatchEnd);
                         if (length > maxLength) {
                             maxLength = length;
                             offset = std::distance(dictMatchbegin, bufferBegin);
@@ -232,12 +231,7 @@ public:
 
                     // add rest of the length
                     auto startIt = result.end() - offset;
-<<<<<<< HEAD
                     std::vector<typename Container::value_type> temp(startIt, result.end());
-=======
-                    std::vector<typename Container::value_type> temp(
-                        startIt, result.end());
->>>>>>> a0520c5 (increase huffman speed)
 
                     for (size_t i = 0; i < length - offset; ++i) {
                         result.push_back(temp[i % offset]);

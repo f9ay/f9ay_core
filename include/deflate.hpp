@@ -226,8 +226,6 @@ private:
         return {std::move(compressedData), buffer.size()};
     }
 
-    static std::pair<std::unique_ptr<std::byte[]>, size_t> _compressDynamic(
-        Matrix<std::byte>& matrix, FilterType filterType) {}
     static uint32_t _calculateAdler32(const std::byte* data, size_t length) {
         uint32_t a = 1, b = 0;
 
@@ -237,6 +235,28 @@ private:
         }
 
         return (b << 16) | a;
+    }
+
+    static auto _runLengthEncode(const std::vector<uint16_t>& data) {
+        std::vector<std::pair<uint16_t, uint16_t>> encodedData;
+        if (data.empty()) {
+            return encodedData;
+        }
+
+        uint16_t currentValue = data[0];
+        uint16_t count = 1;
+
+        for (size_t i = 1; i < data.size(); i++) {
+            if (data[i] == currentValue) {
+                count++;
+            } else {
+                encodedData.emplace_back(currentValue, count);
+                currentValue = data[i];
+                count = 1;
+            }
+        }
+        encodedData.emplace_back(currentValue, count);
+        return encodedData;
     }
     static consteval auto _buildFixedHuffmanTable() {
         std::array<FixedHuffmanCode, 288> fixedHuffmanCodesTable{};

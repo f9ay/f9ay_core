@@ -59,11 +59,7 @@ int main(int argc, char** argv) {
         },
         result);
 
-    Matrix<colors::BGR> mtx(3, 3);
-
-    std::ofstream out(path.parent_path() / "fire_converted.bmp", std::ios::binary);
-
-    std::string test = "AAAAAAAAAAAAAAAAAAAA";
+    std::string test = "aaabbaaa";
 
     auto vec = LZ77::lz77EncodeSlow(test);
     for (auto [offset, length, value] : vec) {

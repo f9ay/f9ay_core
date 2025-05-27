@@ -171,33 +171,6 @@ using namespace f9ay;
 //     return 0;
 // }
 
-std::string convert_amp(uint32_t amp, uint32_t size) {
-    std::string amp_str = std::bitset<16>(amp).to_string();
-    std::ranges::reverse(amp_str);
-    amp_str.resize(size);
-    std::ranges::reverse(amp_str);
-    return amp_str;
-}
-
-void test_rle(std::array<int16_t, 64>& arr) {}
-
-void test_dc_pair(std::vector<int8_t>& dc_test) {
-    auto converted = Jpeg::convert_dc_to_size_value(dc_test);
-    for (auto& [size, value] : converted) {
-        std::string amp_str = convert_amp(value, size);
-        std::print("{{ {} {} }}", size, amp_str);
-    }
-    std::println("=======================");
-}
-
-void test_jpeg() {
-    std::vector<int8_t> dc_test_1 = {0, 1, 2, 3, 4, 5, 6, 7, 8, 77};
-    test_dc_pair(dc_test_1);
-
-    std::vector<int8_t> dc_test_2 = {0, -1, -2, -3, -4, -5, -6, -7, -8, -77};
-    test_dc_pair(dc_test_2);
-}
-
 #include <stacktrace>
 
 void msvc_terminate_handler() {
@@ -219,44 +192,8 @@ int main(int argc, char** argv) {
 #ifdef _MSC_VER
     std::set_terminate(msvc_terminate_handler);
 #endif
-    auto category_test = {0, 1, 2, 3, 4, 5, 6, 7, 8, -5};
-    for (auto&& c : category_test) {
-        std::println(" {} {}", Jpeg::category(c), Jpeg::to_amplitude(c, Jpeg::category(c)));
-    }
-    std::println("");
-    std::array<int16_t, 64> rle_test_1 = {0, 0};
-    test_rle(rle_test_1);
-    std::array<int16_t, 64> rle_test_2 = {0, 0, 1, 0, 0, 2, 3, 4};
-    test_rle(rle_test_2);
-    std::array<int16_t, 64> rle_test_3 = {};
-    rle_test_3[16] = 1;
-    test_rle(rle_test_3);
-    std::array<int16_t, 64> rle_test_4 = {};
-    rle_test_4[17] = 1;
-    test_rle(rle_test_4);
-    std::array<int16_t, 64> rle_test_5 = {};
-    for (int i = 0; i < 64; i++) {
-        rle_test_5[i] = i;
-    }
-    test_rle(rle_test_5);
-    std::println("=================================");
-    test_jpeg();
-    // bit writer test
-    BitWriter writer;
-    writer.changeWriteSequence(WriteSequence::MSB);
-    writer.writeBitsFromMSB(0b10, 2);
-    writer.writeBitsFromMSB(0b1101100, 7);
-    auto buffer1 = writer.getBuffer();
-    for (auto& b : buffer1) {
-        std::print("{} ", std::bitset<8>(uint8_t(b)).to_string());
-    }
-
-    std::println("=================================");
-
-    std::println("{}", Jpeg::category(1024));
-    std::println("{}\n{}", std::bitset<16>(60).to_string(), std::bitset<16>(6).to_string());
     std::filesystem::path path = std::source_location::current().file_name();
-    path = path.parent_path().parent_path() / "test_data" / "test.bmp";
+    path = path.parent_path().parent_path() / "test_data" / "banana.bmp";
     std::cout << path << std::endl;
     std::ifstream fs(path, std::ios::binary);
     if (!fs.is_open()) {

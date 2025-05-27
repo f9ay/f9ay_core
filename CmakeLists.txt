@@ -29,7 +29,7 @@ add_compile_definitions(
 add_executable(f9ay ${SOURCES} ${HEADERS})
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-    target_compile_options(f9ay PRIVATE /FAcs /Qpar)
+    target_compile_options(f9ay PRIVATE /FAcs /Qpar /utf-8)
     target_link_libraries(f9ay PRIVATE user32 gdi32)
 elseif (CMAKE_CXXCOMPILER_ID STREQUAL "CLANG")
     target_compile_options(f9ay PRIVATE -fverbose-asm --save-temps -fexperimental-library)
@@ -43,7 +43,7 @@ add_executable(lz77_test test/lz77_test.cpp)
 target_include_directories(lz77_test PRIVATE ${GTEST_INCLUDE_DIRS} include/lz77_compress.hpp)
 target_link_libraries(lz77_test PRIVATE gtest_main)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-target_compile_options(lz77_test PRIVATE /FAcs $<$<CONFIG:Debug>:/MTd> $<$<CONFIG:Release>:/MT>)
+    target_compile_options(lz77_test PRIVATE /FAcs $<$<CONFIG:Debug>:/MTd> $<$<CONFIG:Release>:/MT>)
     target_link_libraries(lz77_test PRIVATE user32 gdi32)
 endif ()
 

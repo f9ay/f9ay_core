@@ -47,10 +47,9 @@ int main(int argc, char** argv) {
     }
     std::visit(
         [&path](auto&& arg) {
-
             std::ofstream out(path.parent_path() / "test.png", std::ios::binary);
 
-            auto rgbMtx = arg.trans_convert([](const auto& color)  {
+            auto rgbMtx = arg.trans_convert([](const auto& color) {
                 return colors::color_cast<colors::RGB>(color);
             });
 

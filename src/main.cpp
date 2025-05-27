@@ -170,39 +170,13 @@ using namespace f9ay;
 //     return 0;
 // }
 
-std::string convert_amp(uint32_t amp, uint32_t size) {
-    std::string amp_str = std::bitset<16>(amp).to_string();
-    std::ranges::reverse(amp_str);
-    amp_str.resize(size);
-    std::ranges::reverse(amp_str);
-    return amp_str;
-}
-
-void test_rle(std::array<int16_t, 64>& arr) {}
-
-void test_dc_pair(std::vector<int8_t>& dc_test) {
-    auto converted = Jpeg::convert_dc_to_size_value(dc_test);
-    for (auto& [size, value] : converted) {
-        std::string amp_str = convert_amp(value, size);
-        std::print("{{ {} {} }}", size, amp_str);
-    }
-    std::println("=======================");
-}
-
-void test_jpeg() {
-    std::vector<int8_t> dc_test_1 = {0, 1, 2, 3, 4, 5, 6, 7, 8, 77};
-    test_dc_pair(dc_test_1);
-
-    std::vector<int8_t> dc_test_2 = {0, -1, -2, -3, -4, -5, -6, -7, -8, -77};
-    test_dc_pair(dc_test_2);
-}
 
 int main(int argc, char** argv) {
 #ifdef _MSC_VER
     std::set_terminate(msvc_terminate_handler);
 #endif
     std::filesystem::path path = std::source_location::current().file_name();
-    path = path.parent_path().parent_path() / "test_data" / "banana.bmp";
+    path = path.parent_path().parent_path() / "test_data" / "test.bmp";
     std::cout << path << std::endl;
     std::ifstream fs(path, std::ios::binary);
     if (!fs.is_open()) {
@@ -223,10 +197,9 @@ int main(int argc, char** argv) {
     }
     std::visit(
         [&path](auto&& arg) {
-
             std::ofstream out(path.parent_path() / "test.png", std::ios::binary);
 
-            auto rgbMtx = arg.trans_convert([](const auto& color)  {
+            auto rgbMtx = arg.trans_convert([](const auto& color) {
                 return colors::color_cast<colors::RGB>(color);
             });
 

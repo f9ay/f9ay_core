@@ -109,25 +109,80 @@ public:
                        value = (1 << category(x)) - 1 + x;  // 正確的負數編碼
                    }
                    return std::pair<uint8_t, uint32_t>{category(x), value};  // size value
-               }) |
-               std::ranges::to<std::vector>();
+               });
     }
 
-    static std::pair<std::unique_ptr<std::byte[]>, size_t> write(const Matrix<colors::RGB> &src) {
-        auto [dcs, acs] = encode(src);
-        auto [y_dc, y_ac, uv_dc, uv_ac] = build_huffman_tree(dcs, acs);
-        // size_t size = 65354133;  // TODO
-        std::vector<std::byte> buffer;
-        write_data<uint16_t, std::endian::big>(buffer, 0xFFD8u);
-        write_app0(buffer);
-        write_dqt(buffer, y_quantization_matrix, uv_quantization_matrix);
-        write_huffman_all(buffer, y_dc, y_ac, uv_dc, uv_ac);
-        write_sof0_segment(buffer, src.row(), src.col());
-        write_binary_stream(buffer, y_dc, y_ac, uv_dc, uv_ac, dcs, acs);
+private:
+    static auto build_huffman_tree(std::vector<std::vector<int32_t>> &dcs,
+                                   std::vector<Matrix<std::vector<std::pair<unsigned char, int>>>> &acs) {
+        Huffman_tree y_dc;
+        for (const auto &[cat, value] : convert_dc_to_size_value(dcs[0])) {
+            y_dc.add_one(cat);
+        }
+        y_dc.build<16>();
+        Huffman_tree y_ac;
+        for (auto &ac : acs[0].flattenToSpan()) {
+            for (auto &[first, value] : ac) {
+                y_ac.add_one(first);
+            }
+        }
+        y_ac.build<16>();
+        ///////////////////////////////
+        /// CB CR
+        //////////////////////////////
+        Huffman_tree uv_dc;
+        for (const auto &[cat, value] : convert_dc_to_size_value(dcs[1])) {
+            uv_dc.add_one(cat);
+        }
+        for (const auto &[cat, value] : convert_dc_to_size_value(dcs[2])) {
+            uv_dc.add_one(cat);
+        }
+        uv_dc.build<16>();
+        ////////////////////
+        Huffman_tree uv_ac;
+        for (auto &ac : acs[1].flattenToSpan()) {
+            for (auto &[first, value] : ac) {
+                uv_ac.add_one(first);
+            }
+        }
+        for (auto &ac : acs[2].flattenToSpan()) {
+            for (auto &[first, value] : ac) {
+                uv_ac.add_one(first);
+            }
+        }
+        uv_ac.build<16>();
 
-        std::unique_ptr<std::byte[]> result(new std::byte[buffer.size()]);
-        std::copy(buffer.begin(), buffer.end(), result.get());
-        return {std::move(result), buffer.size()};
+        return std::make_tuple(std::move(y_dc), std::move(y_ac), std::move(uv_dc), std::move(uv_ac));
+    }
+
+    static auto encode_huffman_dc(auto &dc, auto &huffman) {
+        // std::vector<int8_t>
+        std::vector<std::pair<bit_content, std::optional<bit_content>>> result;
+        for (const auto &[cat, value] : convert_dc_to_size_value(dc)) {
+            auto enc = huffman.getMapping(cat);
+            auto val_len_pair = bit_content(enc.value, enc.length);
+            if (cat == 0) {
+                result.push_back({val_len_pair, std::nullopt});
+            } else {
+                result.push_back({val_len_pair, std::pair{value, cat}});
+            }
+        }
+        return result;
+    }
+
+    static auto encode_huffman_ac(auto &ac, auto &huffman) {
+        std::vector<std::pair<bit_content, std::optional<bit_content>>> result;
+        for (auto &[first, value] : ac) {
+            auto enc = huffman.getMapping(first);
+            auto val_len_pair = bit_content(enc.value, enc.length);
+            auto size = first & 0xFu;
+            if (size == 0) {
+                result.push_back({val_len_pair, std::nullopt});
+            } else {
+                result.push_back({val_len_pair, std::pair{value, size}});
+            }
+        }
+        return result;
     }
 
 private:
@@ -408,89 +463,26 @@ private:
         return std::tuple{std::move(dcs), std::move(acs)};
     }
 
-private:
-    static auto convert_dc_to_size_value(auto &dc) {
-        return dc | std::views::all | std::views::transform([](auto &x) {
-                   uint32_t value = 0;
-                   if (x >= 0) {
-                       value = x;
-                   } else {
-                       value = (1 << category(x)) - 1 + x;  // 正確的負數編碼
-                   }
-                   return std::pair<uint8_t, uint32_t>{category(x), value};  // size value
-               });
-    }
 
-    static auto build_huffman_tree(std::vector<std::vector<int32_t>> &dcs,
-                                   std::vector<Matrix<std::vector<std::pair<unsigned char, int>>>> &acs) {
-        Huffman_tree y_dc;
-        for (const auto &[cat, value] : convert_dc_to_size_value(dcs[0])) {
-            y_dc.add_one(cat);
-        }
-        y_dc.build<16>();
-        Huffman_tree y_ac;
-        for (auto &ac : acs[0].flattenToSpan()) {
-            for (auto &[first, value] : ac) {
-                y_ac.add_one(first);
-            }
-        }
-        y_ac.build<16>();
-        ///////////////////////////////
-        /// CB CR
-        //////////////////////////////
-        Huffman_tree uv_dc;
-        for (const auto &[cat, value] : convert_dc_to_size_value(dcs[1])) {
-            uv_dc.add_one(cat);
-        }
-        for (const auto &[cat, value] : convert_dc_to_size_value(dcs[2])) {
-            uv_dc.add_one(cat);
-        }
-        uv_dc.build<16>();
-        ////////////////////
-        Huffman_tree uv_ac;
-        for (auto &ac : acs[1].flattenToSpan()) {
-            for (auto &[first, value] : ac) {
-                uv_ac.add_one(first);
-            }
-        }
-        for (auto &ac : acs[2].flattenToSpan()) {
-            for (auto &[first, value] : ac) {
-                uv_ac.add_one(first);
-            }
-        }
-        uv_ac.build<16>();
 
-        return std::make_tuple(std::move(y_dc), std::move(y_ac), std::move(uv_dc), std::move(uv_ac));
-    }
 
-    static auto encode_huffman_dc(auto &dc, auto &huffman) {
-        // std::vector<int8_t>
-        std::vector<std::pair<bit_content, std::optional<bit_content>>> result;
-        for (const auto &[cat, value] : convert_dc_to_size_value(dc)) {
-            auto enc = huffman.getMapping(cat);
-            auto val_len_pair = bit_content(enc.value, enc.length);
-            if (cat == 0) {
-                result.push_back({val_len_pair, std::nullopt});
-            } else {
-                result.push_back({val_len_pair, std::pair{value, cat}});
-            }
-        }
-        return result;
-    }
 
-    static auto encode_huffman_ac(auto &ac, auto &huffman) {
-        std::vector<std::pair<bit_content, std::optional<bit_content>>> result;
-        for (auto &[first, value] : ac) {
-            auto enc = huffman.getMapping(first);
-            auto val_len_pair = bit_content(enc.value, enc.length);
-            auto size = first & 0xFu;
-            if (size == 0) {
-                result.push_back({val_len_pair, std::nullopt});
-            } else {
-                result.push_back({val_len_pair, std::pair{value, size}});
-            }
-        }
-        return result;
+public:
+    static std::pair<std::unique_ptr<std::byte[]>, size_t> write(const Matrix<colors::RGB> &src) {
+        auto [dcs, acs] = encode(src);
+        auto [y_dc, y_ac, uv_dc, uv_ac] = build_huffman_tree(dcs, acs);
+        // size_t size = 65354133;  // TODO
+        std::vector<std::byte> buffer;
+        write_data<uint16_t, std::endian::big>(buffer, 0xFFD8u);
+        write_app0(buffer);
+        write_dqt(buffer, y_quantization_matrix, uv_quantization_matrix);
+        write_huffman_all(buffer, y_dc, y_ac, uv_dc, uv_ac);
+        write_sof0_segment(buffer, src.row(), src.col());
+        write_binary_stream(buffer, y_dc, y_ac, uv_dc, uv_ac, dcs, acs);
+
+        std::unique_ptr<std::byte[]> result(new std::byte[buffer.size()]);
+        std::copy(buffer.begin(), buffer.end(), result.get());
+        return {std::move(result), buffer.size()};
     }
 
 private:

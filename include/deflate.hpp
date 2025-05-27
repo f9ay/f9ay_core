@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <bit>
 #include <cstddef>
 #include <map>
@@ -205,16 +206,22 @@ private:
         Huffman_tree litLengthTree;
         Huffman_tree distanceTree;
 
-        // for (auto& [distance, length, literal] : lz77Compressed) {
-        //     litLengthTree.add(literal);
-        //     litLengthTree.add(length);
-        //     distanceTree.add(distance);
-        // }
+        for (auto& [distance, length, literal] : lz77Compressed) {
+            if (literal.has_value()) {
+                litLengthTree.add_one(static_cast<decltype(length)>(literal.value()));
+            }
+            auto lengthCode = _fixedLengthTable[length].code;
+            litLengthTree.add_one(lengthCode);
+            distanceTree.add_one(distance);
+        }
 
-        // litLengthTree.build();
-        // distanceTree.build();
+        litLengthTree.add_one(256);  // End of block code
 
+        litLengthTree.build<15>();
+        distanceTree.build<15>();
 
+        auto litLengthCodes = litLengthTree.get_standard_huffman_table();
+        auto distanceCodes = distanceTree.get_standard_huffman_table();
 
         BitWriter bitWriter;
 
@@ -222,8 +229,96 @@ private:
         auto compressedData = std::make_unique<std::byte[]>(buffer.size());
 
         std::copy(buffer.begin(), buffer.end(), compressedData.get());
-
         return {std::move(compressedData), buffer.size()};
+    }
+
+    static void _writeCodeLengths(BitWriter& bitWriter, const std::vector<std::pair<int, int>>& litLengthCodes,
+                                  const std::vector<std::pair<int, int>>& distanceCodes) {
+        static constexpr std::array<uint8_t, 19> codeOrderSequence = {
+            16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
+        auto combinedRLE = _getDeflateRLE(litLengthCodes);
+        auto distRLE = _getDeflateRLE(distanceCodes);
+        combinedRLE.insert(combinedRLE.end(), distRLE.begin(), distRLE.end());
+
+        // build Code Lengths huffman tree
+        Huffman_tree codeLengthTree;
+
+        for (const auto& [value, extraFreq] : combinedRLE) {
+            codeLengthTree.add_one(value);
+        }
+
+        codeLengthTree.build<7>();
+        // write the HLIT header
+        bitWriter.writeBitsFromLSB(litLengthCodes.size() - 257, 5);
+        bitWriter.writeBitsFromLSB(distanceCodes.size() - 1, 5);
+        bitWriter.writeBitsFromLSB(codeLengthHuffmanTable.size() - 4);
+
+        bool zeroStarts = false;
+
+        for (const auto& code : codeOrderSequence) {
+            try {
+                auto [huffmanCode, huffmanLength] = codeLengthTree.getMapping(code);
+            } catch (const std::out_of_range&) {
+                // Handle unused codes
+                if (zeroStarts) {
+                    break;
+                }
+                zeroStarts = true;
+                bitWriter.writeBitsFromMSB(0, 0);
+            }
+        }
+    }
+
+    static std::vector<std::pair<int, int>> _getDeflateRLE(const std::vector<std::pair<int, int>>& huffmanCodeTable) {
+        std::vector<std::pair<int, int>> result;
+
+        int nowValue = -1e9;
+        int frequency = 1;
+
+        for (auto& [huffmanCode, huffmanLength] : huffmanCodeTable) {
+            if (huffmanLength != nowValue) {
+                if (frequency >= 3 && frequency <= 6) {  // use 16 to encode
+                    result.push_back({static_cast<uint16_t>(nowValue), 0});
+                    uint8_t extraFreq = static_cast<uint8_t>(frequency - 3 - 1);
+                    result.push_back({static_cast<uint16_t>(16), extraFreq});
+                } else if (frequency >= 3 && frequency <= 10) {  // use 17 to encode
+                    result.push_back({static_cast<uint16_t>(nowValue), 0});
+                    uint8_t extraFreq = static_cast<uint8_t>(frequency - 3 - 1);
+                    result.push_back({static_cast<uint16_t>(17), extraFreq});
+                } else if (frequency > 10) {  // use 18 to encode
+                    result.push_back({static_cast<uint16_t>(nowValue), 0});
+                    uint8_t extraFreq = static_cast<uint8_t>(frequency - 11);
+                    result.push_back({static_cast<uint16_t>(18), extraFreq});
+                } else {
+                    result.push_back({static_cast<uint16_t>(nowValue), 0});
+                }
+
+                frequency = 1;
+                nowValue = huffmanLength;
+            } else {
+                frequency++;
+            }
+        }
+
+        if (frequency > 1) {
+            if (frequency >= 3 && frequency <= 6) {  // use 16 to encode
+                result.push_back({static_cast<uint16_t>(nowValue), 0});
+                uint8_t extraFreq = static_cast<uint8_t>(frequency - 3 - 1);
+                result.push_back({static_cast<uint16_t>(16), extraFreq});
+            } else if (frequency >= 3 && frequency <= 10) {  // use 17 to encode
+                result.push_back({static_cast<uint16_t>(nowValue), 0});
+                uint8_t extraFreq = static_cast<uint8_t>(frequency - 3 - 1);
+                result.push_back({static_cast<uint16_t>(17), extraFreq});
+            } else if (frequency > 10) {  // use 18 to encode
+                result.push_back({static_cast<uint16_t>(nowValue), 0});
+                uint8_t extraFreq = static_cast<uint8_t>(frequency - 11);
+                result.push_back({static_cast<uint16_t>(18), extraFreq});
+            } else {
+                result.push_back({static_cast<uint16_t>(nowValue), 0});
+            }
+        }
+
+        return result;
     }
 
     static uint32_t _calculateAdler32(const std::byte* data, size_t length) {

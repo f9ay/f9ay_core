@@ -5,6 +5,7 @@
 #include <bitset>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <ranges>
 #include <utility>
 #include <vector>
@@ -52,43 +53,136 @@ public:
         template <class T, class U>
         bit_content(const std::pair<T, U> &p) : value(p.first), size(p.second) {}
     };
-
-public:
-    static Midway import(const std::byte *source) {
-        const auto *jfif_app0 = safeMemberAssign<JFIF_APP0>(source);
-        std::pair<const std::byte *, size_t> thumbnail_data = {
-            source + sizeof(JFIF_APP0), 3 * jfif_app0->Xthumbnail * jfif_app0->Ythumbnail};
-        const std::byte *it = source + sizeof(JFIF_APP0) + 3 * jfif_app0->Xthumbnail * jfif_app0->Ythumbnail;
-        if (jfif_app0->version >= 0x0102) {
-            // 先不管 小畫家生出來的也只到1.1
-            // jfif extension app0 available
-            throw std::logic_error("JFIF version does not match");
+    template <int n>
+    static consteval auto zigzag() {
+        std::array<std::pair<int, int>, n * n> res;
+        int index = 0;
+        int row = 0, col = 0;
+        for (int len = 1; len <= n; len++) {
+            for (int i = 0; i < len - 1; i++) {
+                res[index++] = {row, col};
+                if (len % 2 == 0) {
+                    row++;
+                    col--;
+                } else {
+                    col++;
+                    row--;
+                }
+            }
+            res[index++] = {row, col};
+            if (len % 2 == 0) {
+                row++;
+            } else {
+                col++;
+            }
         }
-
-        if (*reinterpret_cast<const uint16_t *>(it) != 0xFFDAu) {
-            throw std::logic_error("JFIF SOS NOT match");
+        row = n - 1;
+        col = 1;
+        for (int len = n - 1; len >= 1; --len) {
+            for (int i = 0; i < len - 1; i++) {
+                res[index++] = {row, col};
+                if (len % 2 == 0) {
+                    row++;
+                    col--;
+                } else {
+                    col++;
+                    row--;
+                }
+            }
+            res[index++] = {row, col};
+            if (len % 2 != 0) {
+                row++;
+            } else {
+                col++;
+            }
         }
-        it += 2;
-        // 	compressed image data
-
-        return {};
+        return res;
     }
 
-    static std::pair<std::unique_ptr<std::byte[]>, size_t> write(const Matrix<colors::RGB> &src) {
-        auto [dcs, acs] = encode(src);
-        auto [y_dc, y_ac, uv_dc, uv_ac] = build_huffman_tree(dcs, acs);
-        // size_t size = 65354133;  // TODO
-        std::vector<std::byte> buffer;
-        write_data<uint16_t, std::endian::big>(buffer, 0xFFD8u);
-        write_app0(buffer);
-        write_dqt(buffer, y_quantization_matrix, uv_quantization_matrix);
-        write_huffman_all(buffer, y_dc, y_ac, uv_dc, uv_ac);
-        write_sof0_segment(buffer, src.row(), src.col());
-        write_binary_stream(buffer, y_dc, y_ac, uv_dc, uv_ac, dcs, acs);
+public:
+    static auto convert_dc_to_size_value(auto &dc) {
+        return dc | std::views::all | std::views::transform([](auto &x) {
+                   uint32_t value = 0;
+                   if (x >= 0) {
+                       value = x;
+                   } else {
+                       value = (1 << category(x)) - 1 + x;  // 正確的負數編碼
+                   }
+                   return std::pair<uint8_t, uint32_t>{category(x), value};  // size value
+               });
+    }
 
-        std::unique_ptr<std::byte[]> result(new std::byte[buffer.size()]);
-        std::copy(buffer.begin(), buffer.end(), result.get());
-        return {std::move(result), buffer.size()};
+private:
+    static auto build_huffman_tree(std::vector<std::vector<int32_t>> &dcs,
+                                   std::vector<Matrix<std::vector<std::pair<unsigned char, int>>>> &acs) {
+        Huffman_tree y_dc;
+        for (const auto &[cat, value] : convert_dc_to_size_value(dcs[0])) {
+            y_dc.add_one(cat);
+        }
+        y_dc.build<16>();
+        Huffman_tree y_ac;
+        for (auto &ac : acs[0].flattenToSpan()) {
+            for (auto &[first, value] : ac) {
+                y_ac.add_one(first);
+            }
+        }
+        y_ac.build<16>();
+        ///////////////////////////////
+        /// CB CR
+        //////////////////////////////
+        Huffman_tree uv_dc;
+        for (const auto &[cat, value] : convert_dc_to_size_value(dcs[1])) {
+            uv_dc.add_one(cat);
+        }
+        for (const auto &[cat, value] : convert_dc_to_size_value(dcs[2])) {
+            uv_dc.add_one(cat);
+        }
+        uv_dc.build<16>();
+        ////////////////////
+        Huffman_tree uv_ac;
+        for (auto &ac : acs[1].flattenToSpan()) {
+            for (auto &[first, value] : ac) {
+                uv_ac.add_one(first);
+            }
+        }
+        for (auto &ac : acs[2].flattenToSpan()) {
+            for (auto &[first, value] : ac) {
+                uv_ac.add_one(first);
+            }
+        }
+        uv_ac.build<16>();
+
+        return std::make_tuple(std::move(y_dc), std::move(y_ac), std::move(uv_dc), std::move(uv_ac));
+    }
+
+    static auto encode_huffman_dc(auto &dc, auto &huffman) {
+        // std::vector<int8_t>
+        std::vector<std::pair<bit_content, std::optional<bit_content>>> result;
+        for (const auto &[cat, value] : convert_dc_to_size_value(dc)) {
+            auto enc = huffman.getMapping(cat);
+            auto val_len_pair = bit_content(enc.value, enc.length);
+            if (cat == 0) {
+                result.push_back({val_len_pair, std::nullopt});
+            } else {
+                result.push_back({val_len_pair, std::pair{value, cat}});
+            }
+        }
+        return result;
+    }
+
+    static auto encode_huffman_ac(auto &ac, auto &huffman) {
+        std::vector<std::pair<bit_content, std::optional<bit_content>>> result;
+        for (auto &[first, value] : ac) {
+            auto enc = huffman.getMapping(first);
+            auto val_len_pair = bit_content(enc.value, enc.length);
+            auto size = first & 0xFu;
+            if (size == 0) {
+                result.push_back({val_len_pair, std::nullopt});
+            } else {
+                result.push_back({val_len_pair, std::pair{value, size}});
+            }
+        }
+        return result;
     }
 
 private:
@@ -344,8 +438,8 @@ private:
                     // 忽略 uninitialize error 因為每個 index 都會填東西
                     std::array<int, 8 * 8> block_zig;  // NOLINT(*-pro-type-member-init)
                     int index = 0;
-                    for (auto &[i, j] : zigzag<8>()) {
-                        block_zig[index++] = block[i, j];
+                    for (auto &coord: zigzag<8>()) {
+                        block_zig[index++] = block[coord.first, coord.second];
                     }
                     return block_zig;
                 });
@@ -369,89 +463,26 @@ private:
         return std::tuple{std::move(dcs), std::move(acs)};
     }
 
-private:
-    static auto convert_dc_to_size_value(auto &dc) {
-        return dc | std::views::all | std::views::transform([](auto &x) {
-                   uint32_t value = 0;
-                   if (x >= 0) {
-                       value = x;
-                   } else {
-                       value = (1 << category(x)) - 1 + x;  // 正確的負數編碼
-                   }
-                   return std::pair<uint8_t, uint32_t>{category(x), value};  // size value
-               });
-    }
 
-    static auto build_huffman_tree(std::vector<std::vector<int32_t>> &dcs,
-                                   std::vector<Matrix<std::vector<std::pair<unsigned char, int>>>> &acs) {
-        Huffman_tree y_dc;
-        for (const auto &[cat, value] : convert_dc_to_size_value(dcs[0])) {
-            y_dc.add_one(cat);
-        }
-        y_dc.build<16>();
-        Huffman_tree y_ac;
-        for (auto &ac : acs[0].flattenToSpan()) {
-            for (auto &[first, value] : ac) {
-                y_ac.add_one(first);
-            }
-        }
-        y_ac.build<16>();
-        ///////////////////////////////
-        /// CB CR
-        //////////////////////////////
-        Huffman_tree uv_dc;
-        for (const auto &[cat, value] : convert_dc_to_size_value(dcs[1])) {
-            uv_dc.add_one(cat);
-        }
-        for (const auto &[cat, value] : convert_dc_to_size_value(dcs[2])) {
-            uv_dc.add_one(cat);
-        }
-        uv_dc.build<16>();
-        ////////////////////
-        Huffman_tree uv_ac;
-        for (auto &ac : acs[1].flattenToSpan()) {
-            for (auto &[first, value] : ac) {
-                uv_ac.add_one(first);
-            }
-        }
-        for (auto &ac : acs[2].flattenToSpan()) {
-            for (auto &[first, value] : ac) {
-                uv_ac.add_one(first);
-            }
-        }
-        uv_ac.build<16>();
 
-        return std::make_tuple(std::move(y_dc), std::move(y_ac), std::move(uv_dc), std::move(uv_ac));
-    }
 
-    static auto encode_huffman_dc(auto &dc, auto &huffman) {
-        // std::vector<int8_t>
-        std::vector<std::pair<bit_content, std::optional<bit_content>>> result;
-        for (const auto &[cat, value] : convert_dc_to_size_value(dc)) {
-            auto enc = huffman.getMapping(cat);
-            auto val_len_pair = bit_content(enc.value, enc.length);
-            if (cat == 0) {
-                result.push_back({val_len_pair, std::nullopt});
-            } else {
-                result.push_back({val_len_pair, std::pair{value, cat}});
-            }
-        }
-        return result;
-    }
 
-    static auto encode_huffman_ac(auto &ac, auto &huffman) {
-        std::vector<std::pair<bit_content, std::optional<bit_content>>> result;
-        for (auto &[first, value] : ac) {
-            auto enc = huffman.getMapping(first);
-            auto val_len_pair = bit_content(enc.value, enc.length);
-            auto size = first & 0xFu;
-            if (size == 0) {
-                result.push_back({val_len_pair, std::nullopt});
-            } else {
-                result.push_back({val_len_pair, std::pair{value, size}});
-            }
-        }
-        return result;
+public:
+    static std::pair<std::unique_ptr<std::byte[]>, size_t> write(const Matrix<colors::RGB> &src) {
+        auto [dcs, acs] = encode(src);
+        auto [y_dc, y_ac, uv_dc, uv_ac] = build_huffman_tree(dcs, acs);
+        // size_t size = 65354133;  // TODO
+        std::vector<std::byte> buffer;
+        write_data<uint16_t, std::endian::big>(buffer, 0xFFD8u);
+        write_app0(buffer);
+        write_dqt(buffer, y_quantization_matrix, uv_quantization_matrix);
+        write_huffman_all(buffer, y_dc, y_ac, uv_dc, uv_ac);
+        write_sof0_segment(buffer, src.row(), src.col());
+        write_binary_stream(buffer, y_dc, y_ac, uv_dc, uv_ac, dcs, acs);
+
+        std::unique_ptr<std::byte[]> result(new std::byte[buffer.size()]);
+        std::copy(buffer.begin(), buffer.end(), result.get());
+        return {std::move(result), buffer.size()};
     }
 
 private:
@@ -534,52 +565,6 @@ private:
             rle.emplace_back(0x00, 0);  // EOB -- end of block
         }
         return rle;
-    }
-
-    template <int n>
-    static consteval auto zigzag() {
-        std::array<std::pair<int, int>, n * n> res;
-        int index = 0;
-        int row = 0, col = 0;
-        for (int len = 1; len <= n; len++) {
-            for (int i = 0; i < len - 1; i++) {
-                res[index++] = {row, col};
-                if (len % 2 == 0) {
-                    row++;
-                    col--;
-                } else {
-                    col++;
-                    row--;
-                }
-            }
-            res[index++] = {row, col};
-            if (len % 2 == 0) {
-                row++;
-            } else {
-                col++;
-            }
-        }
-        row = n - 1;
-        col = 1;
-        for (int len = n - 1; len >= 1; --len) {
-            for (int i = 0; i < len - 1; i++) {
-                res[index++] = {row, col};
-                if (len % 2 == 0) {
-                    row++;
-                    col--;
-                } else {
-                    col++;
-                    row--;
-                }
-            }
-            res[index++] = {row, col};
-            if (len % 2 != 0) {
-                row++;
-            } else {
-                col++;
-            }
-        }
-        return res;
     }
 
     // constexpr static std::array<std::array<uint8_t, 8>, 8> y_quantization_matrix = {

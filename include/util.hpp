@@ -3,6 +3,7 @@
 #include <bitset>
 #include <cstddef>
 #include <vector>
+#include <algorithm>
 
 namespace f9ay {
 

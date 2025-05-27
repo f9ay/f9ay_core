@@ -260,7 +260,7 @@
 //     /// @param index The current index in the encoded data.
 //     /// @param node The current node in the Huffman tree.
 //     /// @return The decoded element.
-//     typename T _decodeRecursively(std::vector<std::byte> data, size_t index, std::unique_ptr<HuffmanNode<T>>& node) {
+//      T _decodeRecursively(std::vector<std::byte> data, size_t index, std::unique_ptr<HuffmanNode<T>>& node) {
 //         if (!node) {
 //             throw std::runtime_error("Invalid code");
 //         }

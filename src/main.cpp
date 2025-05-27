@@ -85,7 +85,6 @@ using namespace f9ay;
 //     [49,  64,  78,  87, 103, 121, 120, 101],
 //     [72,  92,  95,  98, 112, 100, 103,  99] ]
 //     */
-//
 //     Matrix<float> mtx3 = {{16, 11, 10, 16, 24, 40, 51, 61},
 //                           {12, 12, 14, 19, 26, 58, 60, 55},
 //                           {14, 13, 16, 24, 40, 57, 69, 56},
@@ -95,15 +94,15 @@ using namespace f9ay;
 //                           {49, 64, 78, 87, 103, 121, 120, 101},
 //                           {72, 92, 95, 98, 112, 100, 103, 99}};
 //     const auto view3 = Matrix_view(mtx3);
-//
+
 //     auto result = Dct<8, 8>::dct(view3);
-//
+
 //     std::println("{}", result);
-//
+
 //     std::println("======================================");
-//
+
 //     Matrix<float> mtx4(8, 8);
-//
+
 //     for (auto x : mtx4) {
 //         for (auto& y : x) {
 //             y = 128;
@@ -171,35 +170,20 @@ using namespace f9ay;
 //     return 0;
 // }
 
-#include <stacktrace>
-
-void msvc_terminate_handler() {
-    std::cout << std::stacktrace::current() << '\n';
-    auto exception_ptr = std::current_exception();
-    try {
-        if (exception_ptr) {
-            std::rethrow_exception(exception_ptr);
-        }
-    } catch (const std::exception& e) {
-        std::println(stderr, "Unhandled exception:\ntype : {}\nwhat: {}", typeid(e).name(), e.what());
-    } catch (...) {
-        std::println(stderr, "Unknown exception occurred");
-    }
-    std::abort();
-}
 
 int main(int argc, char** argv) {
 #ifdef _MSC_VER
     std::set_terminate(msvc_terminate_handler);
 #endif
     std::filesystem::path path = std::source_location::current().file_name();
-    path = path.parent_path().parent_path() / "test_data" / "banana.bmp";
+    path = path.parent_path().parent_path() / "test_data" / "test.bmp";
     std::cout << path << std::endl;
     std::ifstream fs(path, std::ios::binary);
     if (!fs.is_open()) {
         std::cerr << "Failed to open file" << std::endl;
         return 1;
     }
+
     const auto file = readFile(fs);
     auto result = Bmp::import(file.get());
     auto res = std::get<Matrix<colors::BGR>>(result);
@@ -210,6 +194,26 @@ int main(int argc, char** argv) {
             mtx[i, j].g = res[i, j].g;
             mtx[i, j].b = res[i, j].b;
         }
+    }
+    std::visit(
+        [&path](auto&& arg) {
+            std::ofstream out(path.parent_path() / "test.png", std::ios::binary);
+
+            auto rgbMtx = arg.trans_convert([](const auto& color) {
+                return colors::color_cast<colors::RGB>(color);
+            });
+
+            auto [buffer, size] = PNG::exportToByte(rgbMtx, FilterType::Sub);
+            out.write(reinterpret_cast<const char*>(buffer.get()), size);
+        },
+        result);
+
+    std::string test = "aaabbaaa";
+
+    auto vec = LZ77::lz77EncodeSlow(test);
+    for (auto [offset, length, value] : vec) {
+        std::cout << "Offset: " << offset << ", Length: " << length << ", Value: " << (value.has_value() ? *value : ' ')
+                  << "\n";
     }
     auto [buffer, size] = Jpeg::write(mtx);
 

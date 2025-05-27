@@ -31,17 +31,18 @@ struct ArrayHash {
 };
 class LZ77 {
 public:
-    template <int dictSize = 4096, int hashKeyLen = 3, int maxMatchLen = 258,
-              ContainerConcept Container>
+    // fast version of lz77
+    // we use a windows that size is 3
+    // and find it in the hash table
+    // the hash table contains only one iterator
+    // to the container
+    // then we only find the longest match from that iterator
+    template <int dictSize = 4096, int hashKeyLen = 3, int maxMatchLen = 258, ContainerConcept Container>
     static auto lz77EncodeFast(const Container& container) {
-        std::vector<
-            std::tuple<int, int, std::optional<typename Container::value_type>>>
-            result;
+        std::vector<std::tuple<int, int, std::optional<typename Container::value_type>>> result;
 
-        std::unordered_map<
-            std::array<typename Container::value_type, hashKeyLen>,
-            decltype(container.begin()),
-            ArrayHash<typename Container::value_type, hashKeyLen>>
+        std::unordered_map<std::array<typename Container::value_type, hashKeyLen>, decltype(container.begin()),
+                           ArrayHash<typename Container::value_type, hashKeyLen>>
             hashTable;
 
         auto bufferBegin = container.begin();
@@ -52,8 +53,7 @@ public:
             std::array<typename Container::value_type, hashKeyLen> hashKey;
 
             if (std::distance(bufferBegin, container.end()) >= hashKeyLen) {
-                std::copy(bufferBegin, bufferBegin + hashKeyLen,
-                          hashKey.begin());
+                std::copy(bufferBegin, bufferBegin + hashKeyLen, hashKey.begin());
 
                 auto it = hashTable.find(hashKey);
 
@@ -69,23 +69,19 @@ public:
                         // don't allow offset to be greater than 32768
                         // so just push back the literal value
                         // and go to the next character
-                        result.emplace_back(0, 0,
-                                            std::make_optional(*bufferBegin));
+                        result.emplace_back(0, 0, *bufferBegin);
                         bufferBegin++;
                         continue;
                     }
                     int maxPossibleLength =
-                        std::min({maxMatchLen,
-                                  static_cast<int>(std::distance(
-                                      dictMatchBegin, container.end())),
-                                  static_cast<int>(std::distance(
-                                      bufferBegin, container.end()))});
+                        std::min({maxMatchLen, static_cast<int>(std::distance(dictMatchBegin, container.end())),
+                                  static_cast<int>(std::distance(bufferBegin, container.end()))});
                     // save the hash key to the hash table
                     hashTable[hashKey] = bufferBegin;
 
                     auto [dictMatchEnd, lookheadEnd] = std::mismatch(
-                        dictMatchBegin, dictMatchBegin + maxPossibleLength,
-                        bufferBegin, bufferBegin + maxPossibleLength);
+                        dictMatchBegin, dictMatchBegin + maxPossibleLength, bufferBegin,
+                        bufferBegin + maxPossibleLength);
 
                     // let bufferBegin point to the next character
                     // after the match
@@ -103,10 +99,7 @@ public:
                     bufferBegin = lookheadEnd;
                     // push back the match
                     // and the next character
-                    result.emplace_back(offset, length,
-                                        (bufferBegin != container.end())
-                                            ? std::make_optional(*bufferBegin)
-                                            : std::nullopt);
+                    result.emplace_back(offset, length, (bufferBegin != container.end()) ? *bufferBegin : std::nullopt);
 
                     bufferBegin++;
 
@@ -125,7 +118,7 @@ public:
                 // not enough data to create a hash key
                 // so just push back literal value
                 for (; bufferBegin != container.end(); ++bufferBegin) {
-                    result.emplace_back(0, 0, std::make_optional(*bufferBegin));
+                    result.emplace_back(0, 0, *bufferBegin);
                 }
                 break;
             }
@@ -134,18 +127,22 @@ public:
         return result;
     }
 
-    template <int dictSize = 4096, int hashKeyLen = 3, int maxMatchLen = 258,
-              ContainerConcept Container>
+    // slow version of lz77
+    // we use a windows that size is 3
+    // and find it in the hash table
+    // the hash table is a list of iterators
+    // to the container
+    // then we iterate over the list of iterators
+    // and find the longest match
+    // to get best compression
+    template <int dictSize = 4096, int hashKeyLen = 3, int maxMatchLen = 258, ContainerConcept Container>
     static auto lz77EncodeSlow(const Container& container) {
-        std::unordered_map<
-            std::array<typename Container::value_type, hashKeyLen>,
-            std::list<decltype(container.begin())>,
-            ArrayHash<typename Container::value_type, hashKeyLen>>
+        std::unordered_map<std::array<typename Container::value_type, hashKeyLen>,
+                           std::list<decltype(container.begin())>,
+                           ArrayHash<typename Container::value_type, hashKeyLen>>
             hashTable;
 
-        std::vector<
-            std::tuple<int, int, std::optional<typename Container::value_type>>>
-            result;
+        std::vector<std::tuple<int, int, std::optional<typename Container::value_type>>> result;
 
         auto bufferBegin = container.begin();
 
@@ -153,12 +150,10 @@ public:
             std::array<typename Container::value_type, hashKeyLen> hashKey;
 
             if (std::distance(bufferBegin, container.end()) >= hashKeyLen) {
-                std::copy(bufferBegin, bufferBegin + hashKeyLen,
-                          hashKey.begin());
-                hashTable[hashKey].remove_if(
-                    [&bufferBegin](decltype(container.begin()) it) {
-                        return std::distance(it, bufferBegin) > 32768;
-                    });
+                std::copy(bufferBegin, bufferBegin + hashKeyLen, hashKey.begin());
+                hashTable[hashKey].remove_if([&bufferBegin](decltype(container.begin()) it) {
+                    return std::distance(it, bufferBegin) > 32768;
+                });
                 auto it = hashTable.find(hashKey);
 
                 if (it != hashTable.end()) {
@@ -168,11 +163,8 @@ public:
 
                     for (auto dictMatchbegin : it->second) {
                         int maxPossibleLength =
-                            std::min({maxMatchLen,
-                                      static_cast<int>(std::distance(
-                                          dictMatchbegin, container.end())),
-                                      static_cast<int>(std::distance(
-                                          bufferBegin, container.end()))});
+                            std::min({maxMatchLen, static_cast<int>(std::distance(dictMatchbegin, container.end())),
+                                      static_cast<int>(std::distance(bufferBegin, container.end()))});
                         auto [dictMatchEnd, lookheadEnd] = std::mismatch(
                             dictMatchbegin, dictMatchbegin + maxPossibleLength, bufferBegin,
                             bufferBegin + maxPossibleLength);
@@ -192,13 +184,10 @@ public:
                     if (maxLength > 0) {
                         result.emplace_back(
                             offset, maxLength,
-                            (maxMatchEnd != container.end())
-                                ? std::make_optional(*maxMatchEnd)
-                                : std::nullopt);
+                            (maxMatchEnd != container.end()) ? std::make_optional(*maxMatchEnd) : std::nullopt);
                         bufferBegin = maxMatchEnd;
                     } else {
-                        result.emplace_back(0, 0,
-                                            std::make_optional(*bufferBegin));
+                        result.emplace_back(0, 0, *bufferBegin);
                     }
 
                     if (bufferBegin != container.end()) {
@@ -218,7 +207,7 @@ public:
                 // not enough data to create a hash key
                 // so just push back literal value
                 for (; bufferBegin != container.end(); ++bufferBegin) {
-                    result.emplace_back(0, 0, std::make_optional(*bufferBegin));
+                    result.emplace_back(0, 0, *bufferBegin);
                 }
                 break;
             }
@@ -241,16 +230,14 @@ public:
                     result.insert(result.end(), start, end);
 
                     // add rest of the length
-                    auto restHead = result.end() - offset;
-                    for (int i = 0; i < length - offset; i++) {
-                        if (restHead != result.end()) {
-                            result.push_back(*restHead);
-                            ++restHead;
-                        }
+                    auto startIt = result.end() - offset;
+                    std::vector<typename Container::value_type> temp(startIt, result.end());
+
+                    for (size_t i = 0; i < length - offset; ++i) {
+                        result.push_back(temp[i % offset]);
                     }
                 } else {
-                    result.insert(result.end(), result.end() - offset,
-                                  result.end() - offset + length);
+                    result.insert(result.end(), result.end() - offset, result.end() - offset + length);
                 }
                 if (value.has_value()) {
                     result.push_back(value.value());

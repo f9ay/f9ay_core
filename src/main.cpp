@@ -235,7 +235,7 @@ int main(int argc, char** argv) {
         },
         result);
 
-    std::string test = "AAAAAAAAAAAAAAAAAAAA";
+    std::string test = "aaabbaaa";
 
     auto vec = LZ77::lz77EncodeSlow(test);
     for (auto [offset, length, value] : vec) {

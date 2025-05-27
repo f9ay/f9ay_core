@@ -7,6 +7,7 @@
 
 #include "colors.hpp"
 #include "filter.hpp"
+#include "huffman_tree.hpp"
 #include "lz77_compress.hpp"
 #include "matrix.hpp"
 #include "matrix_concept.hpp"
@@ -165,9 +166,66 @@ private:
         std::copy(buffer.begin(), buffer.end(), compressedData.get());
         return {std::move(compressedData), size};
     }
-
+    template <typename T>
     static std::pair<std::unique_ptr<std::byte[]>, size_t> _compressDynamic(
-        Matrix<std::byte>& matrix, FilterType filterType) {}
+        Matrix<T>& origMatrix, FilterType filterType) {
+        static_assert(_fixedDistanceTable.size() == 32769, "Fixed distance table size mismatch");
+        static_assert(_fixedHuffmanCodesTable.size() == 288, "Fixed Huffman table size mismatch");
+        static_assert(_fixedLengthTable.size() == 259, "Fixed length table size mismatch");
+        using value_type = std::decay_t<decltype(origMatrix[0, 0])>;
+
+        auto filteredMatrix = filter(origMatrix, filterType);
+
+        // expand the scanline to include the filter type
+
+        auto filterTypeByte = static_cast<std::byte>(static_cast<uint8_t>(filterType));
+
+        auto expandedRaw = reinterpret_cast<std::byte*>(filteredMatrix.raw());
+
+        auto expandedMatrix =
+            Matrix{expandedRaw, filteredMatrix.row(), filteredMatrix.col() * static_cast<int>(sizeof(value_type))};
+
+        Matrix<std::byte> expandedMatrixWithFilter(expandedMatrix.row(), expandedMatrix.col() + 1);
+
+        for (int i = 0; i < expandedMatrix.row(); i++) {
+            expandedMatrixWithFilter[i][0] = filterTypeByte;
+            for (int j = 1; j < expandedMatrix.col(); j++) {
+                expandedMatrixWithFilter[i][j] = expandedMatrix[i][j - 1];  // copy the data
+            }
+        }
+
+        // calculate the adler32 checksum
+
+        auto adler32 = _calculateAdler32(reinterpret_cast<std::byte*>(expandedMatrixWithFilter.raw()),
+                                         expandedMatrixWithFilter.row() * expandedMatrixWithFilter.col());
+
+        auto lz77Compressed = LZ77::lz77EncodeSlow(expandedMatrixWithFilter.flattenToSpan());  // Apply LZ77 compression
+
+        // Build Huffman tree for dynamic compression
+        Huffman_tree litLengthTree;
+        Huffman_tree distanceTree;
+
+        // for (auto& [distance, length, literal] : lz77Compressed) {
+        //     litLengthTree.add(literal);
+        //     litLengthTree.add(length);
+        //     distanceTree.add(distance);
+        // }
+
+        // litLengthTree.build();
+        // distanceTree.build();
+
+
+
+        BitWriter bitWriter;
+
+        auto buffer = bitWriter.getBuffer();
+        auto compressedData = std::make_unique<std::byte[]>(buffer.size());
+
+        std::copy(buffer.begin(), buffer.end(), compressedData.get());
+
+        return {std::move(compressedData), buffer.size()};
+    }
+
     static uint32_t _calculateAdler32(const std::byte* data, size_t length) {
         uint32_t a = 1, b = 0;
 
@@ -177,6 +235,28 @@ private:
         }
 
         return (b << 16) | a;
+    }
+
+    static auto _runLengthEncode(const std::vector<uint16_t>& data) {
+        std::vector<std::pair<uint16_t, uint16_t>> encodedData;
+        if (data.empty()) {
+            return encodedData;
+        }
+
+        uint16_t currentValue = data[0];
+        uint16_t count = 1;
+
+        for (size_t i = 1; i < data.size(); i++) {
+            if (data[i] == currentValue) {
+                count++;
+            } else {
+                encodedData.emplace_back(currentValue, count);
+                currentValue = data[i];
+                count = 1;
+            }
+        }
+        encodedData.emplace_back(currentValue, count);
+        return encodedData;
     }
     static consteval auto _buildFixedHuffmanTable() {
         std::array<FixedHuffmanCode, 288> fixedHuffmanCodesTable{};

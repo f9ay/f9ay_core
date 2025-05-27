@@ -175,7 +175,7 @@ public:
 
     // TODO 用表達式模板優化
     template <typename Func>
-    decltype(auto) transform(Func &&func) {
+    auto& transform(Func &&func) {
 #pragma loop(hint_parallel(0))
         for (int i = 0; i < row(); i++) {
             for (int j = 0; j < col(); j++) {

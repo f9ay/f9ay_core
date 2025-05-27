@@ -10,6 +10,7 @@
 #include <ranges>
 #include <unordered_map>
 
+namespace f9ay {
 struct huffman_coeff {
     uint16_t value;
     uint16_t length;
@@ -18,20 +19,7 @@ struct huffman_coeff {
     }
 };
 
-template <typename Char_T>
-struct std::formatter<huffman_coeff, Char_T> : std::formatter<std::string, Char_T> {
-    auto format(const huffman_coeff& coe, auto& ctx) const {
-        auto out = ctx.out();
-        std::string s = std::bitset<16>(coe.value).to_string();
-        std::ranges::reverse(s);
-        s.resize(coe.length);
-        std::ranges::reverse(s);
-        out = std::format_to(out, "{}", s);
-        return out;
-    }
-};
-
-class Huffman_tree {
+class Huffman_tree_no_limit {
 public:
     struct tree_node {
         int freq = 0;
@@ -64,32 +52,8 @@ public:
 
     node_ptr father_of_all = {-1};
 
-    enum class cls { DC, AC };
-
-    template <cls cl>
+    template <int>
     void build() {
-        if constexpr (cl == cls::DC) {
-            for (int i = 0; i <= 11; i++) {
-                if (freq_table[i] == 0) {
-                    freq_table[i] = 0;
-                }
-            }
-        } else {
-            freq_table[0xFu << 4];
-            freq_table[0x0];
-            // for (uint32_t rl = 0; rl <= 15; rl++) {
-            //     for (uint32_t size = 0; size <= 10; size++) {  // sz max is 10
-            //         uint32_t index = rl << 4u | size;
-            //         if (freq_table[index] == 0) {
-            //             freq_table[index] = 0;
-            //         }
-            //     }
-            // }
-        }
-
-        std::println("freq check {}", freq_table);
-
-        ////////////
         std::priority_queue<node_ptr, std::vector<node_ptr>, std::function<bool(const node_ptr&, const node_ptr&)>> pq(
             [this](const node_ptr& a, const node_ptr& b) {
                 return nodes[a.index] > nodes[b.index];
@@ -303,5 +267,221 @@ public:
             // dfs(node.l, depth + 1);
             dfs(node.r, depth + 1);
         }
+    }
+};
+
+class Huffman_tree_limit_len {
+public:
+    struct tree_node {
+        int freq = 0;
+        std::optional<int> value;
+        int l = -1, r = -1;
+        tree_node(int f, int v) : freq(f), value(v) {}
+        tree_node(int f, int l, int r) : freq(f), l(l), r(r) {}
+        auto operator<=>(const tree_node& other) const {
+            return freq <=> other.freq;
+        }
+    };
+
+    std::unordered_map<uint16_t, uint32_t> freq_table;
+    decltype(auto) add(const auto& vec) {
+        for (auto& v : vec) {
+            ++freq_table[v];
+        }
+        return *this;
+    }
+
+    void add_one(const auto& val) {
+        ++freq_table[val];
+    }
+
+    std::vector<tree_node> nodes;
+
+    struct node_ptr {
+        int index;
+    };
+
+    node_ptr father_of_all = {-1};
+
+    template <int limit, bool allow_all_one = false>
+    void build() {
+        if constexpr (allow_all_one == false) {
+            /* 我的超人 https://www.v2ex.com/t/845486 */
+            /* 感謝您  mikewang  */
+            /* 太強了 */
+            freq_table[256] = 1;
+        }
+        std::priority_queue<node_ptr, std::vector<node_ptr>, std::function<bool(const node_ptr&, const node_ptr&)>> pq(
+            [this](const node_ptr& a, const node_ptr& b) {
+                return nodes[a.index] > nodes[b.index];
+            });
+        for (auto& [value, freq] : freq_table) {
+            nodes.emplace_back(freq, value);
+        }
+        for (int i = 0; i < nodes.size(); i++) {
+            pq.push({i});
+        }
+        while (pq.size() > 1) {
+            auto min1 = pq.top();
+            pq.pop();
+            auto min2 = pq.top();
+            pq.pop();
+            auto new_father = tree_node{
+                nodes[min1.index].freq + nodes[min2.index].freq,
+                min1.index,
+                min2.index,
+            };
+            nodes.push_back(new_father);
+            pq.emplace(nodes.size() - 1);  // last index
+        }
+        // pq.size() == 1 means father of all
+        father_of_all = pq.top();
+
+        dfs_statistics_len(father_of_all.index, 0);
+
+        if (numOfLength.rbegin()->first > limit) {
+            // 要縮減長度
+            reduced_length<limit>();
+        }
+
+        std::ranges::sort(symbols, [](const std::pair<int, int>& a, const std::pair<int, int>& b) {
+            if (a.second == b.second) {
+                return a.first < b.first;
+            }
+            return a.second < b.second;
+        });
+
+        // rebuild tree
+        {
+            int curr_len = 1;
+            int curr_quant = 0;
+            for (auto& [symbol, len] : symbols) {
+                while (numOfLength[curr_len] == curr_quant) {
+                    curr_quant = 0;
+                    curr_len++;
+                }
+                len = curr_len;
+                curr_quant++;
+            }
+        }
+
+        {
+            uint16_t current = 0;
+            uint16_t current_len = symbols[0].second;
+            huffman_mapping[symbols[0].first] = huffman_coeff(0, current_len);
+            for (auto& [symbol, len] : symbols | std::views::drop(1)) {
+                current += 1;
+                while (len > current_len) {
+                    current <<= 1;
+                    current_len += 1;
+                }
+                huffman_mapping[symbol] = huffman_coeff(current, len);
+            }
+        }
+
+        if constexpr (allow_all_one == false) {
+            for (auto& [len, cnt] : numOfLength | std::views::reverse) {
+                if (cnt > 0) {
+                    cnt--;
+                    break;
+                }
+            }
+            symbols.pop_back();  // must be 256
+            huffman_mapping.erase(256);
+        }
+    }
+
+    template <int limit>
+    void reduced_length() {
+        int curr_len = numOfLength.rbegin()->first;
+        while (curr_len > limit) {
+            if (numOfLength[curr_len] == 0) {
+                curr_len--;
+                continue;
+            }
+            int target = curr_len - 2;
+            while (target > 0 && numOfLength[target] == 0) {
+                target--;
+            }
+            numOfLength[curr_len] -= 2;
+            numOfLength[curr_len - 1]++;
+            numOfLength[target + 1] += 2;
+            numOfLength[target]--;
+        }
+    }
+    std::map<int, huffman_coeff> huffman_mapping;
+    std::map<int, int> numOfLength;
+
+    // symbol len
+    std::vector<std::pair<int, int>> symbols;
+
+    void dump() {
+        dfsdump(father_of_all.index, 0);
+    }
+
+    void dfs_statistics_len(int index, int len) {
+        if (nodes[index].value.has_value()) {
+            if (len == 0) {
+                numOfLength[1]++;
+                symbols.emplace_back(nodes[index].value.value(), 1);
+            } else {
+                numOfLength[len]++;
+                symbols.emplace_back(nodes[index].value.value(), len);
+            }
+        } else {
+            dfs_statistics_len(nodes[index].l, len + 1);
+            dfs_statistics_len(nodes[index].r, len + 1);
+        }
+    }
+
+    auto& get_numOfLength() {
+        return numOfLength;
+    }
+
+    auto& get_standard_huffman_table() {
+        return symbols;
+    }
+
+    huffman_coeff getMapping(uint16_t value) {
+        return huffman_mapping.at(value);
+    }
+
+    void dfsdump(int index, int depth) {
+        if (index < 0 || index >= nodes.size()) {
+            return;
+        }
+        auto& node = nodes[index];
+        if (node.l != -1 && node.r != -1) {
+            dfsdump(node.l, depth + 1);
+            // dfs(node.r, depth + 1);
+        }
+        for (int i = 0; i < depth; ++i) {
+            std::cout << "  ";  // Indentation for depth
+        }
+        if (node.value.has_value()) {
+            std::cout << "Value: " << node.value.value() << ", Frequency: " << node.freq << ", Depth: " << depth
+                      << "\n";
+        } else {
+            std::cout << "Internal Node, Frequency: " << node.freq << ", Depth: " << depth << "\n";
+        }
+        if (node.l != -1 && node.r != -1) {
+            // dfs(node.l, depth + 1);
+            dfsdump(node.r, depth + 1);
+        }
+    }
+};
+using Huffman_tree = Huffman_tree_limit_len;
+}  // namespace f9ay
+
+template <typename Char_T>
+struct std::formatter<f9ay::huffman_coeff, Char_T> : std::formatter<std::string, Char_T> {
+    auto format(const f9ay::huffman_coeff& coe, auto& ctx) const {
+        auto out = ctx.out();
+        std::string s = std::bitset<16>(coe.value).to_string();
+        std::ranges::reverse(s);
+        s.resize(coe.length);
+        std::ranges::reverse(s);
+        out = std::format_to(out, "{}", s);
+        return out;
     }
 };

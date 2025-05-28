@@ -463,10 +463,6 @@ private:
         return std::tuple{std::move(dcs), std::move(acs)};
     }
 
-
-
-
-
 public:
     static std::pair<std::unique_ptr<std::byte[]>, size_t> write(const Matrix<colors::RGB> &src) {
         auto [dcs, acs] = encode(src);
@@ -483,6 +479,18 @@ public:
         std::unique_ptr<std::byte[]> result(new std::byte[buffer.size()]);
         std::copy(buffer.begin(), buffer.end(), result.get());
         return {std::move(result), buffer.size()};
+    }
+
+    template <typename T>
+    static std::pair<std::unique_ptr<std::byte[]>, size_t> exportToByte(const Matrix<T> &src) {
+        if constexpr (std::same_as<T, colors::RGB>) {
+            return write(src);
+        } else {
+            auto mtx = src.trans_convert([](auto &&ele) {
+                return colors::color_cast<colors::RGB>(ele);
+            });
+            return write(mtx);
+        }
     }
 
 private:

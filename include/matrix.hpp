@@ -1,11 +1,11 @@
 #pragma once
+#include <cmath>
 #include <compare>
 #include <cstddef>
 #include <format>
 #include <iostream>
 #include <span>
 #include <utility>
-#include <cmath>
 
 namespace f9ay {
 template <typename T>
@@ -173,9 +173,17 @@ public:
         return data;
     }
 
+    [[nodiscard]] T *transfer_ownership() {
+        auto temp = data;
+        data = nullptr;
+        cols = 0;
+        rows = 0;
+        return temp;
+    }
+
     // TODO 用表達式模板優化
     template <typename Func>
-    auto& transform(Func &&func) {
+    auto &transform(Func &&func) {
 #pragma loop(hint_parallel(0))
         for (int i = 0; i < row(); i++) {
             for (int j = 0; j < col(); j++) {

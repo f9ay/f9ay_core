@@ -202,6 +202,15 @@ private:
 
         auto lz77Compressed = LZ77::lz77EncodeSlow(expandedMatrixWithFilter.flattenToSpan());  // Apply LZ77 compression
 
+        // test rle
+        std::vector<std::pair<int, int>> testData = {{0, 5}, {1, 5}, {2, 0}, {3, 0}, {4, 0}, {5, 3}};
+
+        auto rle = _getDeflateRLE(testData);
+
+        for (auto [code, extraFreq] : rle) {
+            std::println("code : {0} extraFreq : {1}", code, extraFreq);
+        }
+
         // Build Huffman tree for dynamic compression
         Huffman_tree litLengthTree;
         Huffman_tree distanceTree;
@@ -210,20 +219,122 @@ private:
             if (literal.has_value()) {
                 litLengthTree.add_one(static_cast<decltype(length)>(literal.value()));
             }
-            auto lengthCode = _fixedLengthTable[length].code;
-            litLengthTree.add_one(lengthCode);
-            distanceTree.add_one(distance);
+            if (length > 0) {
+                litLengthTree.add_one(_fixedLengthTable[length].code);
+                distanceTree.add_one(_fixedDistanceTable[distance].code);
+            }
         }
 
         litLengthTree.add_one(256);  // End of block code
 
-        litLengthTree.build<15>();
-        distanceTree.build<15>();
+        litLengthTree.build<15, true>();
+        distanceTree.build<15, true>();
 
         auto litLengthCodes = litLengthTree.get_standard_huffman_table();
         auto distanceCodes = distanceTree.get_standard_huffman_table();
 
+        std::ranges::sort(litLengthCodes, [](const auto& a, const auto& b) {
+            return a.first < b.first;
+        });
+
+        std::ranges::sort(distanceCodes, [](const auto& a, const auto& b) {
+            return a.first < b.first;
+        });
+
+        // print the litLengthCodes and distanceCodes for debugging
+        std::println("litLengthCodes : {0}", litLengthCodes);
+        std::println("distanceCodes : {0}", distanceCodes);
+
+        // padding with zero if the symbol doesn't exist
+
+        std::vector<std::pair<int, int>> paddedLitLengthCodes;
+        const int MAX_LIT_LEN_SYMBOL = 285;  // 字面值/長度字母表的最大符號 (0-285)
+        paddedLitLengthCodes.reserve(MAX_LIT_LEN_SYMBOL + 1);
+        auto it_lit = litLengthCodes.begin();  // 使用您已有的、排序後的 litLengthCodes
+        for (int currentSymbol = 0; currentSymbol <= MAX_LIT_LEN_SYMBOL; ++currentSymbol) {
+            if (it_lit != litLengthCodes.end() && it_lit->first == currentSymbol) {
+                paddedLitLengthCodes.push_back(*it_lit);
+                ++it_lit;
+            } else {
+                paddedLitLengthCodes.emplace_back(currentSymbol, 0);  // 缺失的符號，碼長為 0
+            }
+        }
+        std::vector<std::pair<int, int>> paddedDistanceCodes;
+        const int MAX_DIST_SYMBOL = 29;  // 距離字母表的最大符號 (0-29)
+        paddedDistanceCodes.reserve(MAX_DIST_SYMBOL + 1);
+        auto it_dist = distanceCodes.begin();  // 使用您已有的、排序後的 distanceCodes
+        for (int currentSymbol = 0; currentSymbol <= MAX_DIST_SYMBOL; ++currentSymbol) {
+            if (it_dist != distanceCodes.end() && it_dist->first == currentSymbol) {
+                paddedDistanceCodes.push_back(*it_dist);
+                ++it_dist;
+            } else {
+                paddedDistanceCodes.emplace_back(currentSymbol, 0);  // 缺失的符號，碼長為 0
+            }
+        }
         BitWriter bitWriter;
+
+        // write zlib header
+        bitWriter.writeBitsFromMSB(std::byte{0x78}, 8);  // CMF
+        bitWriter.writeBitsFromMSB(std::byte{0x01}, 8);  // FLG
+
+        // start change write from MSB to LSB
+        // according to deflate spec
+
+        bitWriter.changeWriteSequence(WriteSequence::LSB, false);
+        // write the block header
+        bitWriter.writeBit(1);  // BFINAL 1 == last block
+        bitWriter.writeBitsFromLSB(std::byte{0b00000010},
+                                   2);  // BTYPE (dynamic)
+
+        _writeCodeLengths(bitWriter, paddedLitLengthCodes, paddedDistanceCodes);
+
+        // write actual data
+        for (auto& [distance, length, literal] : lz77Compressed) {
+            if (length == 0 && literal.has_value()) {
+                auto [litCode, litLength] = litLengthTree.getMapping(static_cast<decltype(length)>(literal.value()));
+                bitWriter.writeBitsFromMSB(litCode, litLength);
+            } else if (length > 0) {
+                auto [lengthCode, lengthExtraBit, lengthExtraBitLength] = _fixedLengthTable[length];
+
+                auto [huffLengthCode, huffLength] = litLengthTree.getMapping(lengthCode);
+
+                bitWriter.writeBitsFromMSB(huffLengthCode, huffLength);
+
+                if (lengthExtraBitLength > 0) {
+                    bitWriter.writeBitsFromLSB(lengthExtraBit, lengthExtraBitLength);
+                }
+
+                auto [distCode, distExtraBit, distExtraBitLength] = _fixedDistanceTable[distance];
+                auto [huffDistCode, huffDistLength] = distanceTree.getMapping(distCode);
+
+                bitWriter.writeBitsFromMSB(huffDistCode, huffDistLength);
+                if (distExtraBitLength > 0) {
+                    bitWriter.writeBitsFromLSB(distExtraBit, distExtraBitLength);
+                }
+
+                if (literal.has_value()) {
+                    auto [litCode, litLength] =
+                        litLengthTree.getMapping(static_cast<decltype(length)>(literal.value()));
+                    bitWriter.writeBitsFromMSB(litCode, litLength);
+                }
+            }
+        }
+
+        // write end of block
+        auto [eobCode, eobLength] = litLengthTree.getMapping(256);
+        bitWriter.writeBitsFromMSB(eobCode, eobLength);
+
+        // write the last byte
+        while (bitWriter.getBitPos() % 8 != 0) {
+            bitWriter.writeBit(0);
+        }
+
+        bitWriter.changeWriteSequence(WriteSequence::MSB, false);
+        // write adler32
+        bitWriter.writeBitsFromMSB(adler32, 32);
+        while (bitWriter.getBitPos() % 8 != 0) {
+            bitWriter.writeBit(0);
+        }
 
         auto buffer = bitWriter.getBuffer();
         auto compressedData = std::make_unique<std::byte[]>(buffer.size());
@@ -234,10 +345,10 @@ private:
 
     static void _writeCodeLengths(BitWriter& bitWriter, const std::vector<std::pair<int, int>>& litLengthCodes,
                                   const std::vector<std::pair<int, int>>& distanceCodes) {
-        static constexpr std::array<uint8_t, 19> codeOrderSequence = {
-            16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
-        auto combinedRLE = _getDeflateRLE(litLengthCodes);
+        auto litLengthRLE = _getDeflateRLE(litLengthCodes);
         auto distRLE = _getDeflateRLE(distanceCodes);
+        std::vector<std::pair<int, int>> combinedRLE;
+        combinedRLE.insert(combinedRLE.end(), litLengthRLE.begin(), litLengthRLE.end());
         combinedRLE.insert(combinedRLE.end(), distRLE.begin(), distRLE.end());
 
         // build Code Lengths huffman tree
@@ -248,23 +359,54 @@ private:
         }
 
         codeLengthTree.build<7>();
+
+        auto codeLengthHuffmanTable = codeLengthTree.get_standard_huffman_table();
+
+        std::array<int, 19> codeLengthArray = {0};
+
+        for (const auto& [symbol, length] : codeLengthHuffmanTable) {
+            auto it = std::find(_rleOrder.begin(), _rleOrder.end(), symbol);
+
+            if (it != _rleOrder.end()) {
+                auto index = std::distance(_rleOrder.begin(), it);
+                codeLengthArray[index] = length;
+            }
+        }
+        int maxIndex = 18;
+        while (maxIndex >= 3 && codeLengthArray[maxIndex] == 0) {
+            maxIndex--;
+        }
+
+        uint8_t hdistVal = 0;
+        if (distanceCodes.size() > 0) {
+            hdistVal = static_cast<uint8_t>(distRLE.size() - 1);
+        }
+
         // write the HLIT header
         bitWriter.writeBitsFromLSB(litLengthCodes.size() - 257, 5);
-        bitWriter.writeBitsFromLSB(distanceCodes.size() - 1, 5);
-        bitWriter.writeBitsFromLSB(codeLengthHuffmanTable.size() - 4);
+        bitWriter.writeBitsFromLSB(distanceCodes.size(), 5);
+        bitWriter.writeBitsFromLSB(maxIndex + 1 - 4, 4);
 
-        bool zeroStarts = false;
+        for (int i = 0; i <= maxIndex; i++) {
+            bitWriter.writeBitsFromLSB(codeLengthArray[i], 3);
+        }
 
-        for (const auto& code : codeOrderSequence) {
-            try {
+        for (auto& [code, extraFreq] : combinedRLE) {
+            if (code == 16 || code == 17) {
                 auto [huffmanCode, huffmanLength] = codeLengthTree.getMapping(code);
-            } catch (const std::out_of_range&) {
-                // Handle unused codes
-                if (zeroStarts) {
-                    break;
-                }
-                zeroStarts = true;
-                bitWriter.writeBitsFromMSB(0, 0);
+
+                bitWriter.writeBitsFromMSB(huffmanCode, huffmanLength);
+
+                bitWriter.writeBitsFromLSB(extraFreq, code == 16 ? 2 : 3);
+            } else if (code == 18) {
+                auto [huffmanCode, huffmanLength] = codeLengthTree.getMapping(code);
+
+                bitWriter.writeBitsFromMSB(huffmanCode, huffmanLength);
+
+                bitWriter.writeBitsFromLSB(extraFreq, 7);
+            } else {
+                auto [huffmanCode, huffmanLength] = codeLengthTree.getMapping(code);
+                bitWriter.writeBitsFromMSB(huffmanCode, huffmanLength);
             }
         }
     }
@@ -272,52 +414,59 @@ private:
     static std::vector<std::pair<int, int>> _getDeflateRLE(const std::vector<std::pair<int, int>>& huffmanCodeTable) {
         std::vector<std::pair<int, int>> result;
 
-        int nowValue = -1e9;
-        int frequency = 1;
+        if (huffmanCodeTable.empty()) {
+            return result;
+        }
+
+        int nowValue = huffmanCodeTable.front().second;
+        int frequency = 0;
 
         for (auto& [huffmanCode, huffmanLength] : huffmanCodeTable) {
             if (huffmanLength != nowValue) {
-                if (frequency >= 3 && frequency <= 6) {  // use 16 to encode
-                    result.push_back({static_cast<uint16_t>(nowValue), 0});
-                    uint8_t extraFreq = static_cast<uint8_t>(frequency - 3 - 1);
-                    result.push_back({static_cast<uint16_t>(16), extraFreq});
-                } else if (frequency >= 3 && frequency <= 10) {  // use 17 to encode
-                    result.push_back({static_cast<uint16_t>(nowValue), 0});
-                    uint8_t extraFreq = static_cast<uint8_t>(frequency - 3 - 1);
+                if (frequency >= 3 && frequency <= 10 && nowValue == 0) {  // use 17 to encode
+
+                    uint8_t extraFreq = static_cast<uint8_t>(frequency - 3);
                     result.push_back({static_cast<uint16_t>(17), extraFreq});
-                } else if (frequency > 10) {  // use 18 to encode
+                } else if (frequency >= 3 && frequency <= 6) {  // use 16 to encode
                     result.push_back({static_cast<uint16_t>(nowValue), 0});
+                    uint8_t extraFreq = static_cast<uint8_t>(frequency - 4);
+                    result.push_back({static_cast<uint16_t>(16), extraFreq});
+                } else if (frequency > 10 && nowValue == 0) {  // use 18 to encode
+
                     uint8_t extraFreq = static_cast<uint8_t>(frequency - 11);
                     result.push_back({static_cast<uint16_t>(18), extraFreq});
                 } else {
-                    result.push_back({static_cast<uint16_t>(nowValue), 0});
+                    for (int i = 0; i < frequency; i++) {
+                        result.push_back({static_cast<uint16_t>(nowValue), 0});
+                    }
                 }
 
                 frequency = 1;
                 nowValue = huffmanLength;
             } else {
                 frequency++;
+                // }
             }
         }
 
         if (frequency > 1) {
-            if (frequency >= 3 && frequency <= 6) {  // use 16 to encode
-                result.push_back({static_cast<uint16_t>(nowValue), 0});
-                uint8_t extraFreq = static_cast<uint8_t>(frequency - 3 - 1);
-                result.push_back({static_cast<uint16_t>(16), extraFreq});
-            } else if (frequency >= 3 && frequency <= 10) {  // use 17 to encode
-                result.push_back({static_cast<uint16_t>(nowValue), 0});
-                uint8_t extraFreq = static_cast<uint8_t>(frequency - 3 - 1);
+            if (frequency >= 3 && frequency <= 10 && nowValue == 0) {  // use 17 to encode
+                uint8_t extraFreq = static_cast<uint8_t>(frequency - 3);
                 result.push_back({static_cast<uint16_t>(17), extraFreq});
-            } else if (frequency > 10) {  // use 18 to encode
+            } else if (frequency >= 3 && frequency <= 6) {  // use 16 to encode
                 result.push_back({static_cast<uint16_t>(nowValue), 0});
+                uint8_t extraFreq = static_cast<uint8_t>(frequency - 4);
+                result.push_back({static_cast<uint16_t>(16), extraFreq});
+            } else if (frequency > 10 && nowValue == 0) {  // use 18 to encode
+
                 uint8_t extraFreq = static_cast<uint8_t>(frequency - 11);
                 result.push_back({static_cast<uint16_t>(18), extraFreq});
             } else {
-                result.push_back({static_cast<uint16_t>(nowValue), 0});
+                for (int i = 0; i < frequency; i++) {
+                    result.push_back({static_cast<uint16_t>(nowValue), 0});
+                }
             }
         }
-
         return result;
     }
 
@@ -617,5 +766,6 @@ private:
     static constexpr auto _fixedHuffmanCodesTable = _buildFixedHuffmanTable();
     static constexpr auto _fixedLengthTable = _buildFixedLengthTable();
     static constexpr auto _fixedDistanceTable = _buildFixedDistanceTable();
+    static constexpr std::array<int, 19> _rleOrder = {16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
 };
 }  // namespace f9ay::deflate

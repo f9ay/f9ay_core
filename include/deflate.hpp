@@ -247,30 +247,37 @@ private:
 
         // padding with zero if the symbol doesn't exist
 
+        int maxLitLengthSymbol = std::max(litLengthCodes.back().first, 257);
+
+        int maxDistSymbol = distanceCodes.size() > 0 ? distanceCodes.back().first : 0;
+
         std::vector<std::pair<int, int>> paddedLitLengthCodes;
-        const int MAX_LIT_LEN_SYMBOL = 285;  // 字面值/長度字母表的最大符號 (0-285)
-        paddedLitLengthCodes.reserve(MAX_LIT_LEN_SYMBOL + 1);
-        auto it_lit = litLengthCodes.begin();  // 使用您已有的、排序後的 litLengthCodes
-        for (int currentSymbol = 0; currentSymbol <= MAX_LIT_LEN_SYMBOL; ++currentSymbol) {
-            if (it_lit != litLengthCodes.end() && it_lit->first == currentSymbol) {
-                paddedLitLengthCodes.push_back(*it_lit);
-                ++it_lit;
+        for (int i = 0; i <= maxLitLengthSymbol; i++) {
+            auto it = std::find_if(litLengthCodes.begin(), litLengthCodes.end(), [i](const auto& pair) {
+                return pair.first == i;
+            });
+            if (it != litLengthCodes.end()) {
+                paddedLitLengthCodes.push_back(*it);
             } else {
-                paddedLitLengthCodes.emplace_back(currentSymbol, 0);  // 缺失的符號，碼長為 0
+                paddedLitLengthCodes.emplace_back(i, 0);  // padding with zero
             }
         }
         std::vector<std::pair<int, int>> paddedDistanceCodes;
-        const int MAX_DIST_SYMBOL = 29;  // 距離字母表的最大符號 (0-29)
-        paddedDistanceCodes.reserve(MAX_DIST_SYMBOL + 1);
-        auto it_dist = distanceCodes.begin();  // 使用您已有的、排序後的 distanceCodes
-        for (int currentSymbol = 0; currentSymbol <= MAX_DIST_SYMBOL; ++currentSymbol) {
-            if (it_dist != distanceCodes.end() && it_dist->first == currentSymbol) {
-                paddedDistanceCodes.push_back(*it_dist);
-                ++it_dist;
+        for (int i = 0; i <= maxDistSymbol; i++) {
+            auto it = std::find_if(distanceCodes.begin(), distanceCodes.end(), [i](const auto& pair) {
+                return pair.first == i;
+            });
+            if (it != distanceCodes.end()) {
+                paddedDistanceCodes.push_back(*it);
             } else {
-                paddedDistanceCodes.emplace_back(currentSymbol, 0);  // 缺失的符號，碼長為 0
+                paddedDistanceCodes.emplace_back(i, 0);  // padding with zero
             }
         }
+
+        // print the padded litLengthCodes and distanceCodes for debugging
+        std::println("paddedLitLengthCodes : {0}", paddedLitLengthCodes);
+        std::println("paddedDistanceCodes : {0}", paddedDistanceCodes);
+
         BitWriter bitWriter;
 
         // write zlib header
@@ -347,6 +354,9 @@ private:
                                   const std::vector<std::pair<int, int>>& distanceCodes) {
         auto litLengthRLE = _getDeflateRLE(litLengthCodes);
         auto distRLE = _getDeflateRLE(distanceCodes);
+
+        std::println("litLengthRLE : {0}", litLengthRLE);
+        std::println("distRLE : {0}", distRLE);
         std::vector<std::pair<int, int>> combinedRLE;
         combinedRLE.insert(combinedRLE.end(), litLengthRLE.begin(), litLengthRLE.end());
         combinedRLE.insert(combinedRLE.end(), distRLE.begin(), distRLE.end());
@@ -377,21 +387,28 @@ private:
             maxIndex--;
         }
 
-        uint8_t hdistVal = 0;
-        if (distanceCodes.size() > 0) {
-            hdistVal = static_cast<uint8_t>(distRLE.size() - 1);
+        uint8_t hlit = static_cast<uint8_t>(litLengthCodes.back().first > 256 ? litLengthCodes.back().first - 257 : 0);
+        uint8_t hdist = static_cast<uint8_t>(distanceCodes.size() > 0 ? distanceCodes.back().first : 0);
+        uint8_t hclen = static_cast<uint8_t>(maxIndex + 1 - 4);
+
+        std::println("HLIT: {0}, HDIST: {1}, HCLEN: {2}", hlit, hdist, hclen);
+
+        std::println("Writing CL lengths in order:");
+        for (int i = 0; i <= maxIndex; i++) {
+            std::println("  CL[{}] (symbol {}): {}", i, _rleOrder[i], codeLengthArray[i]);
         }
 
         // write the HLIT header
-        bitWriter.writeBitsFromLSB(litLengthCodes.size() - 257, 5);
-        bitWriter.writeBitsFromLSB(distanceCodes.size(), 5);
-        bitWriter.writeBitsFromLSB(maxIndex + 1 - 4, 4);
+        bitWriter.writeBitsFromLSB(hlit, 5);
+        bitWriter.writeBitsFromLSB(hdist, 5);
+        bitWriter.writeBitsFromLSB(hclen, 4);
 
         for (int i = 0; i <= maxIndex; i++) {
             bitWriter.writeBitsFromLSB(codeLengthArray[i], 3);
         }
 
         for (auto& [code, extraFreq] : combinedRLE) {
+            std::println("Writing RLE: code={}, extraFreq={}", code, extraFreq);
             if (code == 16 || code == 17) {
                 auto [huffmanCode, huffmanLength] = codeLengthTree.getMapping(code);
 
@@ -409,6 +426,11 @@ private:
                 bitWriter.writeBitsFromMSB(huffmanCode, huffmanLength);
             }
         }
+        std::println("Final verification:");
+        std::println("  Total lit/length symbols: {}", litLengthCodes.size());
+        std::println("  Total distance symbols: {}", distanceCodes.size());
+        std::println("  RLE sequence length: {}", combinedRLE.size());
+        std::println("  Code length symbols used: {}", maxIndex + 1);
     }
 
     static std::vector<std::pair<int, int>> _getDeflateRLE(const std::vector<std::pair<int, int>>& huffmanCodeTable) {
@@ -427,14 +449,22 @@ private:
 
                     uint8_t extraFreq = static_cast<uint8_t>(frequency - 3);
                     result.push_back({static_cast<uint16_t>(17), extraFreq});
-                } else if (frequency >= 3 && frequency <= 6) {  // use 16 to encode
+                } else if (frequency >= 4 && frequency <= 6) {  // use 16 to encode
                     result.push_back({static_cast<uint16_t>(nowValue), 0});
                     uint8_t extraFreq = static_cast<uint8_t>(frequency - 4);
                     result.push_back({static_cast<uint16_t>(16), extraFreq});
                 } else if (frequency > 10 && nowValue == 0) {  // use 18 to encode
 
-                    uint8_t extraFreq = static_cast<uint8_t>(frequency - 11);
-                    result.push_back({static_cast<uint16_t>(18), extraFreq});
+                    while (frequency >= 11) {
+                        int chunk = std::min(frequency, 138);  // 18碼最大重複138次(11+127)
+                        uint8_t extraFreq = static_cast<uint8_t>(chunk - 11);
+                        result.push_back({static_cast<uint16_t>(18), extraFreq});
+                        frequency -= chunk;
+                    }
+                    // 處理剩餘的frequency(如果有的話)
+                    for (int i = 0; i < frequency; i++) {
+                        result.push_back({static_cast<uint16_t>(nowValue), 0});
+                    }
                 } else {
                     for (int i = 0; i < frequency; i++) {
                         result.push_back({static_cast<uint16_t>(nowValue), 0});
@@ -449,18 +479,26 @@ private:
             }
         }
 
-        if (frequency > 1) {
+        if (frequency > 0) {
             if (frequency >= 3 && frequency <= 10 && nowValue == 0) {  // use 17 to encode
                 uint8_t extraFreq = static_cast<uint8_t>(frequency - 3);
                 result.push_back({static_cast<uint16_t>(17), extraFreq});
-            } else if (frequency >= 3 && frequency <= 6) {  // use 16 to encode
+            } else if (frequency >= 4 && frequency <= 6) {  // use 16 to encode
                 result.push_back({static_cast<uint16_t>(nowValue), 0});
                 uint8_t extraFreq = static_cast<uint8_t>(frequency - 4);
                 result.push_back({static_cast<uint16_t>(16), extraFreq});
             } else if (frequency > 10 && nowValue == 0) {  // use 18 to encode
 
-                uint8_t extraFreq = static_cast<uint8_t>(frequency - 11);
-                result.push_back({static_cast<uint16_t>(18), extraFreq});
+                while (frequency >= 11) {
+                    int chunk = std::min(frequency, 138);  // 18碼最大重複138次(11+127)
+                    uint8_t extraFreq = static_cast<uint8_t>(chunk - 11);
+                    result.push_back({static_cast<uint16_t>(18), extraFreq});
+                    frequency -= chunk;
+                }
+                // 處理剩餘的frequency(如果有的話)
+                for (int i = 0; i < frequency; i++) {
+                    result.push_back({static_cast<uint16_t>(nowValue), 0});
+                }
             } else {
                 for (int i = 0; i < frequency; i++) {
                     result.push_back({static_cast<uint16_t>(nowValue), 0});

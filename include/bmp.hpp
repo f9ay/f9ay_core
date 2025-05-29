@@ -14,8 +14,8 @@ namespace f9ay {
 class Bmp {
 #pragma pack(push, 1)
     struct FileHeader {
-        unsigned short type; /* type : Magic identifier,一般為BM(0x42,0x4d) */
-        unsigned int size;   /* File size in bytes,全部的檔案大小 */
+        unsigned short type;                 /* type : Magic identifier,一般為BM(0x42,0x4d) */
+        unsigned int size;                   /* File size in bytes,全部的檔案大小 */
         unsigned short reserved1, reserved2; /* 保留欄位 */
         unsigned int offset;                 /* Offset to image data, bytes */
     };
@@ -42,10 +42,9 @@ class Bmp {
     static_assert(sizeof(ColorPalette) == 4);
 
 public:
-    static Midway import(const std::byte *source) {
+    static Midway importFromByte(const std::byte *source) {
         const FileHeader *fileHeader = safeMemberAssign<FileHeader>(source);
-        const InfoHeader *infoHeader =
-            safeMemberAssign<InfoHeader>(source + sizeof(FileHeader));
+        const InfoHeader *infoHeader = safeMemberAssign<InfoHeader>(source + sizeof(FileHeader));
         if (infoHeader->compression == true) {
             throw std::runtime_error("Unsupported BMP compression");
         }
@@ -68,14 +67,13 @@ public:
         throw std::runtime_error("Unsupported BMP format");
     }
 
-    template <MATRIX_CONCEPT Matrix_Type>
-    static std::pair<std::unique_ptr<std::byte[]>, size_t> write(
-        Matrix_Type mtx) {
+    template <typename T>
+        requires std::same_as<T, colors::BGR> || std::same_as<T, colors::BGRA>
+    static std::pair<std::unique_ptr<std::byte[]>, size_t> write(const Matrix<T> &mtx) {
         using value_type = std::decay_t<decltype(mtx[0, 0])>;
         constexpr auto element_size = sizeof(value_type);
         const auto rawRowSize = align<4>(mtx.col() * element_size);
-        const auto size =
-            sizeof(FileHeader) + sizeof(InfoHeader) + rawRowSize * mtx.row();
+        const auto size = sizeof(FileHeader) + sizeof(InfoHeader) + rawRowSize * mtx.row();
         std::unique_ptr<std::byte[]> result(new std::byte[size]);
         FileHeader fileHeader{};
         fileHeader.type = 0x4D42;
@@ -91,11 +89,9 @@ public:
         infoHeader.imagesize = mtx.col() * mtx.row() * sizeof(value_type);
 
         //////////////////////////////////////////
-        auto it = std::copy(reinterpret_cast<std::byte *>(&fileHeader),
-                            reinterpret_cast<std::byte *>(&fileHeader + 1),
-                            result.get());
-        it = std::copy(reinterpret_cast<std::byte *>(&infoHeader),
-                       reinterpret_cast<std::byte *>(&infoHeader + 1), it);
+        auto it = std::copy(
+            reinterpret_cast<std::byte *>(&fileHeader), reinterpret_cast<std::byte *>(&fileHeader + 1), result.get());
+        it = std::copy(reinterpret_cast<std::byte *>(&infoHeader), reinterpret_cast<std::byte *>(&infoHeader + 1), it);
         auto data = it;
 
         for (int i = 0; i < mtx.row(); i++) {
@@ -108,13 +104,28 @@ public:
         return {std::move(result), size};
     }
 
+    template <typename T>
+    static std::pair<std::unique_ptr<std::byte[]>, size_t> exportToByte(const Matrix<T> &src) {
+        if constexpr (std::same_as<T, colors::BGR> || std::same_as<T, colors::BGRA>) {
+            return write(src);
+        } else if constexpr (requires { T().a; }) {
+            auto mtx = src.trans_convert([](auto &&ele) {
+                return colors::color_cast<colors::BGRA>(ele);
+            });
+            return write(mtx);
+        } else {
+            auto mtx = src.trans_convert([](auto &&ele) {
+                return colors::color_cast<colors::BGR>(ele);
+            });
+            return write(mtx);
+        }
+    }
+
 private:
     template <typename T>
-    static void read_data(const std::byte *source, Matrix<T> &dst,
-                          const FileHeader *fileHeader,
+    static void read_data(const std::byte *source, Matrix<T> &dst, const FileHeader *fileHeader,
                           const InfoHeader *infoHeader) {
-        const bool seqRead =
-            infoHeader->height < 0;  // 當 height 為負時 順序讀取
+        const bool seqRead = infoHeader->height < 0;  // 當 height 為負時 順序讀取
         const auto data = source + fileHeader->offset;
         const auto pixelSize = infoHeader->bits / 8;  // byte
         const auto rowSize = infoHeader->width * pixelSize;

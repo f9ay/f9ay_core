@@ -2,7 +2,6 @@
 
 #include <cmath>
 #include <numbers>
-#include <cmath>
 
 #include "matrix.hpp"
 #include "matrix_concept.hpp"

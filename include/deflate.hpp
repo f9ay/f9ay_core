@@ -1,7 +1,9 @@
 #pragma once
 
+#include <algorithm>
 #include <bit>
 #include <cstddef>
+#include <format>
 #include <map>
 #include <memory>
 
@@ -19,18 +21,86 @@ template <BlockType blockType>
 class Deflate {
 public:
     template <typename T>
-    static std::pair<std::unique_ptr<std::byte[]>, size_t> compress(Matrix<T>& matrix, FilterType filterType) {
+    static std::pair<std::unique_ptr<std::byte[]>, size_t> compress(Matrix<T>& img, FilterType filterType) {
         // Compress the input data
+
+        BitWriter bitWriter;
+
+        auto filteredMatrix = filter(img, filterType);
+
+        using value_type = std::decay_t<decltype(img[0, 0])>;
+
+        // expand the scanline to include the filter type
+
+        auto filterTypeByte = static_cast<std::byte>(static_cast<uint8_t>(filterType));
+
+        auto expandedRaw = reinterpret_cast<std::byte*>(filteredMatrix.raw());
+
+        auto expandedMatrix =
+            Matrix{expandedRaw, filteredMatrix.row(), filteredMatrix.col() * static_cast<int>(sizeof(value_type))};
+
+        Matrix<std::byte> expandedMatrixWithFilter(expandedMatrix.row(), expandedMatrix.col() + 1);
+
+        for (int i = 0; i < expandedMatrix.row(); i++) {
+            expandedMatrixWithFilter[i][0] = filterTypeByte;
+            for (int j = 0; j < expandedMatrix.col(); ++j) {
+                expandedMatrixWithFilter[i][j + 1] = expandedMatrix[i][j];
+            }
+        }
+
+        // calculate the adler32 checksum
+
+        auto adler32 = _calculateAdler32(reinterpret_cast<std::byte*>(expandedMatrixWithFilter.raw()),
+                                         expandedMatrixWithFilter.row() * expandedMatrixWithFilter.col());
+
+        // write zlib header
+        bitWriter.writeBitsFromMSB(std::byte{0x78}, 8);  // CMF
+        bitWriter.writeBitsFromMSB(std::byte{0x01}, 8);  // FLG
 
         switch (blockType) {
             case BlockType::Uncompressed:
-                break;
+
+                throw std::runtime_error("Uncompressed block type is not supported in this implementation");
             case BlockType::Fixed:
-                return _compressFixed(matrix, filterType);
+                _compressFixed(expandedMatrixWithFilter, filterType, bitWriter);
+                break;
             case BlockType::Dynamic:
-                return _compressDynamic(matrix, filterType);
+                // need split the matrix into blocks
+                // and compress each block separately
+                // the blockSize is coloums * rowSizePerBlock
+                constexpr int rowSizePerBlock = 10000;
+
+                if (expandedMatrixWithFilter.row() > rowSizePerBlock) {
+                    // split the matrix into blocks
+                    int numRowBlocks = (expandedMatrixWithFilter.row() + rowSizePerBlock - 1) / rowSizePerBlock;
+                    for (int block_idx = 0; block_idx < numRowBlocks; ++block_idx) {
+                        int startRow = block_idx * rowSizePerBlock;
+                        int currentBlockRows = std::min(rowSizePerBlock, expandedMatrixWithFilter.row() - startRow);
+
+                        // Create a Matrix for the current block.
+                        // This constructor Matrix(T* data, int rows, int cols) creates a view,
+                        // it does not copy the data.
+                        Matrix<std::byte> block(
+                            expandedMatrixWithFilter.raw() + startRow * expandedMatrixWithFilter.col(),
+                            currentBlockRows, expandedMatrixWithFilter.col());
+
+                        // Determine BFINAL: 1 if it's the last block, 0 otherwise.
+                        uint8_t bfinal_flag = (block_idx == numRowBlocks - 1) ? 1 : 0;
+                        _compressDynamic(block, filterType, bitWriter, bfinal_flag);
+                    }
+                } else {
+                    _compressDynamic(expandedMatrixWithFilter, filterType, bitWriter, 1);
+                }
+                break;
         }
-        throw std::runtime_error("Unsupported block type");
+
+        // write adler32 checksum
+        bitWriter.writeBitsFromMSB(adler32, 32);  // ADLER32
+        // write the compressed data
+        auto buffer = bitWriter.getBuffer();
+        auto compressedData = std::make_unique<std::byte[]>(buffer.size());
+        std::copy(buffer.begin(), buffer.end(), compressedData.get());
+        return {std::move(compressedData), buffer.size()};
     }
 
 private:
@@ -52,43 +122,11 @@ private:
     };
 
     template <typename T>
-    static std::pair<std::unique_ptr<std::byte[]>, size_t> _compressFixed(
-        Matrix<T>& origMatrix, FilterType filterType) {
+    static void _compressFixed(Matrix<T>& img, FilterType filterType, BitWriter& bitWriter) {
         static_assert(_fixedDistanceTable.size() == 32769, "Fixed distance table size mismatch");
         static_assert(_fixedHuffmanCodesTable.size() == 288, "Fixed Huffman table size mismatch");
         static_assert(_fixedLengthTable.size() == 259, "Fixed length table size mismatch");
-        using value_type = std::decay_t<decltype(origMatrix[0, 0])>;
-
-        auto filteredMatrix = filter(origMatrix, filterType);
-
-        // expand the scanline to include the filter type
-
-        auto filterTypeByte = static_cast<std::byte>(static_cast<uint8_t>(filterType));
-
-        auto expandedRaw = reinterpret_cast<std::byte*>(filteredMatrix.raw());
-
-        auto expandedMatrix =
-            Matrix{expandedRaw, filteredMatrix.row(), filteredMatrix.col() * static_cast<int>(sizeof(value_type))};
-
-        Matrix<std::byte> expandedMatrixWithFilter(expandedMatrix.row(), expandedMatrix.col() + 1);
-
-        for (int i = 0; i < expandedMatrix.row(); i++) {
-            expandedMatrixWithFilter[i][0] = filterTypeByte;
-            for (int j = 1; j < expandedMatrix.col(); j++) {
-                expandedMatrixWithFilter[i][j] = expandedMatrix[i][j - 1];  // copy the data
-            }
-        }
-
-        // calculate the adler32 checksum
-
-        auto adler32 = _calculateAdler32(reinterpret_cast<std::byte*>(expandedMatrixWithFilter.raw()),
-                                         expandedMatrixWithFilter.row() * expandedMatrixWithFilter.col());
-
-        BitWriter bitWriter;
-
-        // write zlib header
-        bitWriter.writeBitsFromMSB(std::byte{0x78}, 8);  // CMF
-        bitWriter.writeBitsFromMSB(std::byte{0x01}, 8);  // FLG
+        using value_type = std::decay_t<decltype(img[0, 0])>;
 
         // start change write from MSB to LSB
         // according to deflate spec
@@ -99,7 +137,7 @@ private:
         bitWriter.writeBitsFromLSB(std::byte{0b00000001},
                                    2);  // BTYPE (fixed)
 
-        auto flattened = expandedMatrixWithFilter.flattenToSpan();
+        auto flattened = img.flattenToSpan();
         // Apply LZ77 compression
         auto vec = LZ77::lz77EncodeSlow(flattened);
 
@@ -149,81 +187,295 @@ private:
         }
 
         bitWriter.changeWriteSequence(WriteSequence::MSB);
-
-        // adler32 = checkAndSwapToBigEndian(adler32);
-
-        // write adler32
-        bitWriter.writeBitsFromMSB(adler32, 32);
-
-        while (bitWriter.getBitPos() % 8 != 0) {
-            bitWriter.writeBit(0);
-        }
-        auto buffer = bitWriter.getBuffer();
-
-        auto size = buffer.size();
-
-        auto compressedData = std::make_unique<std::byte[]>(size);
-        std::copy(buffer.begin(), buffer.end(), compressedData.get());
-        return {std::move(compressedData), size};
     }
     template <typename T>
-    static std::pair<std::unique_ptr<std::byte[]>, size_t> _compressDynamic(
-        Matrix<T>& origMatrix, FilterType filterType) {
+    static void _compressDynamic(Matrix<T>& img, FilterType filterType, BitWriter& bitWriter, uint8_t BFINAL = 1) {
         static_assert(_fixedDistanceTable.size() == 32769, "Fixed distance table size mismatch");
         static_assert(_fixedHuffmanCodesTable.size() == 288, "Fixed Huffman table size mismatch");
         static_assert(_fixedLengthTable.size() == 259, "Fixed length table size mismatch");
-        using value_type = std::decay_t<decltype(origMatrix[0, 0])>;
+        using value_type = std::decay_t<decltype(img[0, 0])>;
 
-        auto filteredMatrix = filter(origMatrix, filterType);
-
-        // expand the scanline to include the filter type
-
-        auto filterTypeByte = static_cast<std::byte>(static_cast<uint8_t>(filterType));
-
-        auto expandedRaw = reinterpret_cast<std::byte*>(filteredMatrix.raw());
-
-        auto expandedMatrix =
-            Matrix{expandedRaw, filteredMatrix.row(), filteredMatrix.col() * static_cast<int>(sizeof(value_type))};
-
-        Matrix<std::byte> expandedMatrixWithFilter(expandedMatrix.row(), expandedMatrix.col() + 1);
-
-        for (int i = 0; i < expandedMatrix.row(); i++) {
-            expandedMatrixWithFilter[i][0] = filterTypeByte;
-            for (int j = 1; j < expandedMatrix.col(); j++) {
-                expandedMatrixWithFilter[i][j] = expandedMatrix[i][j - 1];  // copy the data
-            }
-        }
-
-        // calculate the adler32 checksum
-
-        auto adler32 = _calculateAdler32(reinterpret_cast<std::byte*>(expandedMatrixWithFilter.raw()),
-                                         expandedMatrixWithFilter.row() * expandedMatrixWithFilter.col());
-
-        auto lz77Compressed = LZ77::lz77EncodeSlow(expandedMatrixWithFilter.flattenToSpan());  // Apply LZ77 compression
+        auto lz77Compressed = LZ77::lz77EncodeSlow(img.flattenToSpan());  // Apply LZ77 compression
 
         // Build Huffman tree for dynamic compression
         Huffman_tree litLengthTree;
         Huffman_tree distanceTree;
 
-        // for (auto& [distance, length, literal] : lz77Compressed) {
-        //     litLengthTree.add(literal);
-        //     litLengthTree.add(length);
-        //     distanceTree.add(distance);
-        // }
+        for (auto& [distance, length, literal] : lz77Compressed) {
+            if (literal.has_value()) {
+                litLengthTree.add_one(static_cast<decltype(length)>(literal.value()));
+            }
+            if (length > 0) {
+                litLengthTree.add_one(_fixedLengthTable[length].code);
+                distanceTree.add_one(_fixedDistanceTable[distance].code);
+            }
+        }
 
-        // litLengthTree.build();
-        // distanceTree.build();
+        litLengthTree.add_one(256);  // End of block code
 
+        litLengthTree.build<15, true>();
+        distanceTree.build<15, true>();
 
+        auto litLengthCodes = litLengthTree.get_standard_huffman_table();
+        auto distanceCodes = distanceTree.get_standard_huffman_table();
 
-        BitWriter bitWriter;
+        std::ranges::sort(litLengthCodes, [](const auto& a, const auto& b) {
+            return a.first < b.first;
+        });
 
-        auto buffer = bitWriter.getBuffer();
-        auto compressedData = std::make_unique<std::byte[]>(buffer.size());
+        std::ranges::sort(distanceCodes, [](const auto& a, const auto& b) {
+            return a.first < b.first;
+        });
 
-        std::copy(buffer.begin(), buffer.end(), compressedData.get());
+        for (auto& [symbol, length] : litLengthCodes) {
+            auto [litCode, litLength] = litLengthTree.getMapping(symbol);
+            std::println("litLengthCode : {}", to_str(litCode, litLength));
+        }
 
-        return {std::move(compressedData), buffer.size()};
+        for (auto& [symbol, length] : distanceCodes) {
+            auto [distCode, distLength] = distanceTree.getMapping(symbol);
+            std::println("distanceCode : {}", to_str(distCode, distLength));
+        }
+
+        // print the litLengthCodes and distanceCodes for debugging
+        std::println("litLengthCodes : {0}", litLengthCodes);
+        std::println("distanceCodes : {0}", distanceCodes);
+
+        // padding with zero if the symbol doesn't exist
+
+        int maxLitLengthSymbol = litLengthCodes.back().first;
+
+        int maxDistSymbol = distanceCodes.size() > 0 ? distanceCodes.back().first : 0;
+
+        std::vector<std::pair<int, int>> paddedLitLengthCodes;
+        for (int i = 0; i <= maxLitLengthSymbol; i++) {
+            auto it = std::find_if(litLengthCodes.begin(), litLengthCodes.end(), [i](const auto& pair) {
+                return pair.first == i;
+            });
+            if (it != litLengthCodes.end()) {
+                paddedLitLengthCodes.push_back(*it);
+            } else {
+                paddedLitLengthCodes.emplace_back(i, 0);  // padding with zero
+            }
+        }
+        std::vector<std::pair<int, int>> paddedDistanceCodes;
+        for (int i = 0; i <= maxDistSymbol; i++) {
+            auto it = std::find_if(distanceCodes.begin(), distanceCodes.end(), [i](const auto& pair) {
+                return pair.first == i;
+            });
+            if (it != distanceCodes.end()) {
+                paddedDistanceCodes.push_back(*it);
+            } else {
+                paddedDistanceCodes.emplace_back(i, 0);  // padding with zero
+            }
+        }
+
+        if (paddedDistanceCodes.size() < 2) {
+            paddedDistanceCodes.clear();
+            paddedDistanceCodes.emplace_back(0, 1);
+            paddedDistanceCodes.emplace_back(1, 1);
+        }
+        // print the padded litLengthCodes and distanceCodes for debugging
+        std::println("paddedLitLengthCodes : {0}", paddedLitLengthCodes);
+        std::println("paddedDistanceCodes : {0}", paddedDistanceCodes);
+
+        // start change write from MSB to LSB
+        // according to deflate spec
+
+        bitWriter.changeWriteSequence(WriteSequence::LSB);
+        // write the block header
+        bitWriter.writeBit(BFINAL);  // BFINAL 1 == last block
+        bitWriter.writeBitsFromLSB(std::byte{0b00000010},
+                                   2);  // BTYPE (dynamic)
+
+        _writeCodeLengths(bitWriter, paddedLitLengthCodes, paddedDistanceCodes);
+
+        // write actual data
+        for (auto& [distance, length, literal] : lz77Compressed) {
+            if (length == 0 && literal.has_value()) {
+                auto [litCode, litLength] = litLengthTree.getMapping(static_cast<decltype(length)>(literal.value()));
+
+                bitWriter.writeBitsFromMSB(litCode, litLength);
+            } else {
+                auto [lengthCode, lengthExtraBit, lengthExtraBitLength] = _fixedLengthTable[length];
+
+                auto [huffLengthCode, huffLength] = litLengthTree.getMapping(lengthCode);
+
+                bitWriter.writeBitsFromMSB(huffLengthCode, huffLength);
+
+                if (lengthExtraBitLength > 0) {
+                    bitWriter.writeBitsFromLSB(lengthExtraBit, lengthExtraBitLength);
+                }
+
+                auto [distCode, distExtraBit, distExtraBitLength] = _fixedDistanceTable[distance];
+                auto [huffDistCode, huffDistLength] = distanceTree.getMapping(distCode);
+
+                bitWriter.writeBitsFromMSB(huffDistCode, huffDistLength);
+                if (distExtraBitLength > 0) {
+                    bitWriter.writeBitsFromLSB(distExtraBit, distExtraBitLength);
+                }
+
+                if (literal.has_value()) {
+                    auto [litCode, litLength] =
+                        litLengthTree.getMapping(static_cast<decltype(length)>(literal.value()));
+
+                    bitWriter.writeBitsFromMSB(litCode, litLength);
+                }
+            }
+        }
+
+        // write end of block
+        auto [eobCode, eobLength] = litLengthTree.getMapping(256);
+        bitWriter.writeBitsFromMSB(eobCode, eobLength);
+
+        // write the last byte
+        while (bitWriter.getBitPos() % 8 != 0) {
+            bitWriter.writeBit(0);
+        }
+
+        bitWriter.changeWriteSequence(WriteSequence::MSB);
+    }
+
+    static void _writeCodeLengths(BitWriter& bitWriter, const std::vector<std::pair<int, int>>& litLengthCodes,
+                                  const std::vector<std::pair<int, int>>& distanceCodes) {
+        auto litLengthRLE = _getDeflateRLE(litLengthCodes);
+        auto distRLE = _getDeflateRLE(distanceCodes);
+
+        std::println("litLengthRLE : {0}", litLengthRLE);
+        std::println("distRLE : {0}", distRLE);
+        decltype(litLengthRLE) combinedRLE;
+        combinedRLE.insert(combinedRLE.end(), litLengthRLE.begin(), litLengthRLE.end());
+        combinedRLE.insert(combinedRLE.end(), distRLE.begin(), distRLE.end());
+
+        std::println("combinedRLE : {0}", combinedRLE);
+
+        // build Code Lengths huffman tree
+        Huffman_tree codeLengthTree;
+
+        for (const auto& [value, extraFreq] : combinedRLE) {
+            codeLengthTree.add_one(value);
+        }
+
+        codeLengthTree.build<7, true>();
+
+        auto codeLengthHuffmanTable = codeLengthTree.get_standard_huffman_table();
+
+        std::println("codeLengthHuffmanTable : {0}", codeLengthHuffmanTable);
+
+        std::array<int, 19> codeLengthArray = {0};
+
+        for (const auto& [symbol, length] : codeLengthHuffmanTable) {
+            auto it = std::find(_rleOrder.begin(), _rleOrder.end(), symbol);
+
+            if (it != _rleOrder.end()) {
+                auto index = std::distance(_rleOrder.begin(), it);
+
+                codeLengthArray[index] = length;
+            }
+        }
+        int maxIndex = 18;
+        while (maxIndex >= 3 && codeLengthArray[maxIndex] == 0) {
+            maxIndex--;
+        }
+
+        uint8_t hlit = static_cast<uint8_t>(litLengthCodes.size() - 257);
+        uint8_t hdist = static_cast<uint8_t>(distanceCodes.size() - 1);
+        uint8_t hclen = static_cast<uint8_t>(maxIndex + 1 - 4);
+
+        std::println("HLIT: {0}, HDIST: {1}, HCLEN: {2}", hlit, hdist, hclen);
+
+        std::println("Writing CL lengths in order:");
+        for (int i = 0; i <= maxIndex; i++) {
+            std::println("  CL[{}] (symbol {}): {}", i, _rleOrder[i], codeLengthArray[i]);
+        }
+
+        // write the HLIT header
+        bitWriter.writeBitsFromLSB(hlit, 5);
+        bitWriter.writeBitsFromLSB(hdist, 5);
+        bitWriter.writeBitsFromLSB(hclen, 4);
+
+        std::println("Writing code lengths: {0}", codeLengthArray);
+
+        for (int i = 0; i <= maxIndex; i++) {
+            bitWriter.writeBitsFromLSB(codeLengthArray[i], 3);
+        }
+
+        for (auto& [code, extraFreq] : combinedRLE) {
+            std::println("Writing RLE: code={}, extraFreq={}", code, extraFreq);
+            if (code == 16 || code == 17) {
+                auto [huffmanCode, huffmanLength] = codeLengthTree.getMapping(code);
+
+                bitWriter.writeBitsFromMSB(huffmanCode, huffmanLength);
+
+                bitWriter.writeBitsFromLSB(extraFreq, code == 16 ? 2 : 3);
+            } else if (code == 18) {
+                auto [huffmanCode, huffmanLength] = codeLengthTree.getMapping(code);
+
+                bitWriter.writeBitsFromMSB(huffmanCode, huffmanLength);
+
+                bitWriter.writeBitsFromLSB(extraFreq, 7);
+            } else {
+                auto [huffmanCode, huffmanLength] = codeLengthTree.getMapping(code);
+
+                bitWriter.writeBitsFromMSB(huffmanCode, huffmanLength);
+            }
+        }
+        std::println("Final verification:");
+        std::println("  Total lit/length symbols: {}", litLengthCodes.size());
+        std::println("  Total distance symbols: {}", distanceCodes.size());
+        std::println("  RLE sequence length: {}", combinedRLE.size());
+        std::println("  Code length symbols used: {}", maxIndex + 1);
+    }
+
+    static auto _getDeflateRLE(const std::vector<std::pair<int, int>>& huffmanCodeTable) {
+        std::vector<std::pair<int, int>> result;
+
+        if (huffmanCodeTable.empty()) {
+            return result;
+        }
+
+        for (int i = 0; i < huffmanCodeTable.size(); i++) {
+            auto [symbol, length] = huffmanCodeTable[i];
+
+            int repeatCount = 1;
+
+            for (int j = i + 1; j < huffmanCodeTable.size(); j++) {
+                auto [nextSymbol, nextLength] = huffmanCodeTable[j];
+
+                if (nextLength == length) {
+                    repeatCount++;
+                } else {
+                    break;
+                }
+            }
+
+            if (length == 0 && repeatCount >= 3) {  // code 17
+                if (repeatCount < 11) {
+                    result.emplace_back(17, static_cast<uint8_t>(repeatCount - 3));
+                } else {
+                    if (repeatCount > 138) {
+                        repeatCount = 138;
+                    }
+                    result.emplace_back(18, static_cast<uint8_t>(repeatCount - 11));
+                }
+                i += repeatCount - 1;
+            } else {
+                if (repeatCount > 3) {
+                    // emplace back the first one
+                    result.emplace_back(static_cast<uint8_t>(length), 0);
+                    repeatCount -= 1;
+                    if (repeatCount > 6) {
+                        repeatCount = 6;
+                    }
+                    result.emplace_back(16, static_cast<uint8_t>(repeatCount - 3));  // need to delete the first one
+                    i += repeatCount;
+                } else {
+                    result.emplace_back(static_cast<uint8_t>(length), 0);  // code 0-15
+                }
+            }
+        }
+
+        return result;
     }
 
     static uint32_t _calculateAdler32(const std::byte* data, size_t length) {
@@ -235,28 +487,6 @@ private:
         }
 
         return (b << 16) | a;
-    }
-
-    static auto _runLengthEncode(const std::vector<uint16_t>& data) {
-        std::vector<std::pair<uint16_t, uint16_t>> encodedData;
-        if (data.empty()) {
-            return encodedData;
-        }
-
-        uint16_t currentValue = data[0];
-        uint16_t count = 1;
-
-        for (size_t i = 1; i < data.size(); i++) {
-            if (data[i] == currentValue) {
-                count++;
-            } else {
-                encodedData.emplace_back(currentValue, count);
-                currentValue = data[i];
-                count = 1;
-            }
-        }
-        encodedData.emplace_back(currentValue, count);
-        return encodedData;
     }
     static consteval auto _buildFixedHuffmanTable() {
         std::array<FixedHuffmanCode, 288> fixedHuffmanCodesTable{};
@@ -381,5 +611,6 @@ private:
     static constexpr auto _fixedHuffmanCodesTable = _buildFixedHuffmanTable();
     static constexpr auto _fixedLengthTable = _buildFixedLengthTable();
     static constexpr auto _fixedDistanceTable = _buildFixedDistanceTable();
+    static constexpr std::array<int, 19> _rleOrder = {16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
 };
 }  // namespace f9ay::deflate

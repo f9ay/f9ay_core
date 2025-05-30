@@ -305,6 +305,9 @@ public:
 
     template <int limit, bool allow_all_one = false>
     void build() {
+        if (freq_table.empty()) {
+            return;
+        }
         if constexpr (allow_all_one == false) {
             /* 我的超人 https://www.v2ex.com/t/845486 */
             /* 感謝您  mikewang  */

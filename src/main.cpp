@@ -24,33 +24,9 @@
 
 using namespace f9ay;
 
-
-
-int main(int argc, char **argv) {
-    // std::visit(
-    //     [&path](auto &&arg) {
-    //         std::ofstream out(path.parent_path() / "test.png", std::ios::binary);
-    //
-    //         auto rgbMtx = arg.trans_convert([](const auto &color) {
-    //             return colors::color_cast<colors::RGB>(color);
-    //         });
-    //
-    //         auto [buffer, size] = PNG::exportToByte(rgbMtx, FilterType::Sub);
-    //         out.write(reinterpret_cast<const char *>(buffer.get()), size);
-    //     },
-    //     result);
-    //
-    // std::string test = "aaabbaaa";
-    //
-    // auto vec = LZ77::lz77EncodeSlow(test);
-    // for (auto [offset, length, value] : vec) {
-    //     std::cout << "Offset: " << offset << ", Length: " << length << ", Value: " << (value.has_value() ? *value : '
-    //     ')
-    //               << "\n";
-    // }
-
+int main(int argc, char** argv) {
     std::filesystem::path path = std::source_location::current().file_name();
-    path = path.parent_path().parent_path() / "test_data" / "test.bmp";
+    path = path.parent_path().parent_path() / "test_data" / "1.bmp";
     std::cout << path << std::endl;
     std::ifstream fs(path, std::ios::binary);
     if (!fs.is_open()) {
@@ -69,8 +45,32 @@ int main(int argc, char **argv) {
             mtx[i, j].b = res[i, j].b;
         }
     }
-    auto [buffer, size] = Bmp::exportToByte(mtx);
-    
-    std::ofstream out(path.parent_path() / "current.bmp", std::ios::binary);
-    out.write(reinterpret_cast<const char *>(buffer.get()), size);
+    // std::visit(
+    //     [&path](auto&& arg) {
+    //         std::ofstream out(path.parent_path() / "test.png", std::ios::binary);
+    //
+    //         auto rgbMtx = arg.trans_convert([](const auto& color) {
+    //             return colors::color_cast<colors::RGB>(color);
+    //         });
+    //
+    //         auto [buffer, size] = PNG::exportToByte(rgbMtx, FilterType::Sub);
+    //         out.write(reinterpret_cast<const char*>(buffer.get()), size);
+    //     },
+    //     result);
+    //
+    // std::string test = "aaabbaaa";
+    //
+    // auto vec = LZ77::lz77EncodeSlow(test);
+    // for (auto [offset, length, value] : vec) {
+    //     std::cout << "Offset: " << offset << ", Length: " << length << ", Value: " << (value.has_value() ? *value : '
+    //     ')
+    //               << "\n";
+    // }
+    auto start = std::chrono::high_resolution_clock::now();
+    auto [buffer, size] = Jpeg::write(mtx);
+    auto end = std::chrono::high_resolution_clock::now();
+    std::println("{}", std::chrono::duration_cast<std::chrono::milliseconds>(end - start));
+
+    std::ofstream out(path.parent_path() / "current.jpeg", std::ios::binary);
+    out.write(reinterpret_cast<const char*>(buffer.get()), size);
 }

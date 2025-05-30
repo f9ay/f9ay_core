@@ -26,14 +26,14 @@ using namespace f9ay;
 
 int main(int argc, char** argv) {
     std::filesystem::path path = std::source_location::current().file_name();
-    path = path.parent_path().parent_path() / "test_data" / "1.bmp";
+    path = path.parent_path().parent_path() / "test_data" / "swiss.bmp";
     std::cout << path << std::endl;
     std::ifstream fs(path, std::ios::binary);
     if (!fs.is_open()) {
         std::cerr << "Failed to open file" << std::endl;
         return 1;
     }
-    
+
     const auto file = readFile(fs);
     auto result = Bmp::importFromByte(file.get());
     auto res = std::get<Matrix<colors::BGR>>(result);

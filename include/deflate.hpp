@@ -294,7 +294,7 @@ private:
         // start change write from MSB to LSB
         // according to deflate spec
 
-        bitWriter.changeWriteSequence(WriteSequence::LSB, false);
+        bitWriter.changeWriteSequence(WriteSequence::LSB);
         // write the block header
         bitWriter.writeBit(1);  // BFINAL 1 == last block
         bitWriter.writeBitsFromLSB(std::byte{0b00000010},
@@ -345,7 +345,7 @@ private:
             bitWriter.writeBit(0);
         }
 
-        bitWriter.changeWriteSequence(WriteSequence::MSB, false);
+        bitWriter.changeWriteSequence(WriteSequence::MSB);
         // write adler32
         bitWriter.writeBitsFromMSB(adler32, 32);
 

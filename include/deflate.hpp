@@ -68,7 +68,7 @@ public:
                 // need split the matrix into blocks
                 // and compress each block separately
                 // the blockSize is coloums * rowSizePerBlock
-                constexpr int rowSizePerBlock = 1000;
+                constexpr int rowSizePerBlock = 10000;
 
                 if (expandedMatrixWithFilter.row() > rowSizePerBlock) {
                     // split the matrix into blocks

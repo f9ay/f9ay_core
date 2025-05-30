@@ -7,7 +7,6 @@
 #include <print>
 #include <span>
 #include <utility>
-#include <cmath>
 
 namespace f9ay {
 template <typename T>
@@ -379,7 +378,11 @@ struct std::formatter<f9ay::Matrix<T>, Char_T> : std::formatter<std::string, Cha
             "===============================\n");
         for (int i = 0; i < matrix.row(); i++) {
             for (int j = 0; j < matrix.col(); j++) {
-                out = std::format_to(out, "{} ", matrix[i][j]);
+                if constexpr (std::is_same_v<T, std::byte>) {
+                    out = std::format_to(out, "{:02x} ", static_cast<unsigned int>(matrix[i][j]));
+                } else {
+                    out = std::format_to(out, "{} ", matrix[i][j]);
+                }
             }
             out = std::format_to(out, "\n");
         }

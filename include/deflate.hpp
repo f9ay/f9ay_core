@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <bit>
 #include <cstddef>
+#include <format>
 #include <map>
 #include <memory>
 
@@ -75,8 +76,8 @@ private:
 
         for (int i = 0; i < expandedMatrix.row(); i++) {
             expandedMatrixWithFilter[i][0] = filterTypeByte;
-            for (int j = 1; j < expandedMatrix.col(); j++) {
-                expandedMatrixWithFilter[i][j] = expandedMatrix[i][j - 1];  // copy the data
+            for (int j = 0; j < expandedMatrix.col(); ++j) {
+                expandedMatrixWithFilter[i][j + 1] = expandedMatrix[i][j];
             }
         }
 
@@ -190,8 +191,8 @@ private:
 
         for (int i = 0; i < expandedMatrix.row(); i++) {
             expandedMatrixWithFilter[i][0] = filterTypeByte;
-            for (int j = 1; j < expandedMatrix.col(); j++) {
-                expandedMatrixWithFilter[i][j] = expandedMatrix[i][j - 1];  // copy the data
+            for (int j = 0; j < expandedMatrix.col(); ++j) {
+                expandedMatrixWithFilter[i][j + 1] = expandedMatrix[i][j];
             }
         }
 
@@ -201,15 +202,6 @@ private:
                                          expandedMatrixWithFilter.row() * expandedMatrixWithFilter.col());
 
         auto lz77Compressed = LZ77::lz77EncodeSlow(expandedMatrixWithFilter.flattenToSpan());  // Apply LZ77 compression
-
-        // test rle
-        std::vector<std::pair<int, int>> testData = {{0, 5}, {1, 5}, {2, 0}, {3, 0}, {4, 0}, {5, 3}};
-
-        auto rle = _getDeflateRLE(testData);
-
-        for (auto [code, extraFreq] : rle) {
-            std::println("code : {0} extraFreq : {1}", code, extraFreq);
-        }
 
         // Build Huffman tree for dynamic compression
         Huffman_tree litLengthTree;
@@ -241,13 +233,23 @@ private:
             return a.first < b.first;
         });
 
+        for (auto& [symbol, length] : litLengthCodes) {
+            auto [litCode, litLength] = litLengthTree.getMapping(symbol);
+            std::println("litLengthCode : {}", to_str(litCode, litLength));
+        }
+
+        for (auto& [symbol, length] : distanceCodes) {
+            auto [distCode, distLength] = distanceTree.getMapping(symbol);
+            std::println("distanceCode : {}", to_str(distCode, distLength));
+        }
+
         // print the litLengthCodes and distanceCodes for debugging
         std::println("litLengthCodes : {0}", litLengthCodes);
         std::println("distanceCodes : {0}", distanceCodes);
 
         // padding with zero if the symbol doesn't exist
 
-        int maxLitLengthSymbol = std::max(litLengthCodes.back().first, 257);
+        int maxLitLengthSymbol = litLengthCodes.back().first;
 
         int maxDistSymbol = distanceCodes.size() > 0 ? distanceCodes.back().first : 0;
 
@@ -274,6 +276,11 @@ private:
             }
         }
 
+        if (paddedDistanceCodes.size() < 2) {
+            paddedDistanceCodes.clear();
+            paddedDistanceCodes.emplace_back(0, 1);
+            paddedDistanceCodes.emplace_back(1, 1);
+        }
         // print the padded litLengthCodes and distanceCodes for debugging
         std::println("paddedLitLengthCodes : {0}", paddedLitLengthCodes);
         std::println("paddedDistanceCodes : {0}", paddedDistanceCodes);
@@ -299,8 +306,9 @@ private:
         for (auto& [distance, length, literal] : lz77Compressed) {
             if (length == 0 && literal.has_value()) {
                 auto [litCode, litLength] = litLengthTree.getMapping(static_cast<decltype(length)>(literal.value()));
+
                 bitWriter.writeBitsFromMSB(litCode, litLength);
-            } else if (length > 0) {
+            } else {
                 auto [lengthCode, lengthExtraBit, lengthExtraBitLength] = _fixedLengthTable[length];
 
                 auto [huffLengthCode, huffLength] = litLengthTree.getMapping(lengthCode);
@@ -322,6 +330,7 @@ private:
                 if (literal.has_value()) {
                     auto [litCode, litLength] =
                         litLengthTree.getMapping(static_cast<decltype(length)>(literal.value()));
+
                     bitWriter.writeBitsFromMSB(litCode, litLength);
                 }
             }
@@ -339,9 +348,6 @@ private:
         bitWriter.changeWriteSequence(WriteSequence::MSB, false);
         // write adler32
         bitWriter.writeBitsFromMSB(adler32, 32);
-        while (bitWriter.getBitPos() % 8 != 0) {
-            bitWriter.writeBit(0);
-        }
 
         auto buffer = bitWriter.getBuffer();
         auto compressedData = std::make_unique<std::byte[]>(buffer.size());
@@ -357,9 +363,11 @@ private:
 
         std::println("litLengthRLE : {0}", litLengthRLE);
         std::println("distRLE : {0}", distRLE);
-        std::vector<std::pair<int, int>> combinedRLE;
+        decltype(litLengthRLE) combinedRLE;
         combinedRLE.insert(combinedRLE.end(), litLengthRLE.begin(), litLengthRLE.end());
         combinedRLE.insert(combinedRLE.end(), distRLE.begin(), distRLE.end());
+
+        std::println("combinedRLE : {0}", combinedRLE);
 
         // build Code Lengths huffman tree
         Huffman_tree codeLengthTree;
@@ -368,9 +376,11 @@ private:
             codeLengthTree.add_one(value);
         }
 
-        codeLengthTree.build<7>();
+        codeLengthTree.build<7, true>();
 
         auto codeLengthHuffmanTable = codeLengthTree.get_standard_huffman_table();
+
+        std::println("codeLengthHuffmanTable : {0}", codeLengthHuffmanTable);
 
         std::array<int, 19> codeLengthArray = {0};
 
@@ -379,6 +389,7 @@ private:
 
             if (it != _rleOrder.end()) {
                 auto index = std::distance(_rleOrder.begin(), it);
+
                 codeLengthArray[index] = length;
             }
         }
@@ -387,8 +398,8 @@ private:
             maxIndex--;
         }
 
-        uint8_t hlit = static_cast<uint8_t>(litLengthCodes.back().first > 256 ? litLengthCodes.back().first - 257 : 0);
-        uint8_t hdist = static_cast<uint8_t>(distanceCodes.size() > 0 ? distanceCodes.back().first : 0);
+        uint8_t hlit = static_cast<uint8_t>(litLengthCodes.size() - 257);
+        uint8_t hdist = static_cast<uint8_t>(distanceCodes.size() - 1);
         uint8_t hclen = static_cast<uint8_t>(maxIndex + 1 - 4);
 
         std::println("HLIT: {0}, HDIST: {1}, HCLEN: {2}", hlit, hdist, hclen);
@@ -402,6 +413,8 @@ private:
         bitWriter.writeBitsFromLSB(hlit, 5);
         bitWriter.writeBitsFromLSB(hdist, 5);
         bitWriter.writeBitsFromLSB(hclen, 4);
+
+        std::println("Writing code lengths: {0}", codeLengthArray);
 
         for (int i = 0; i <= maxIndex; i++) {
             bitWriter.writeBitsFromLSB(codeLengthArray[i], 3);
@@ -423,6 +436,7 @@ private:
                 bitWriter.writeBitsFromLSB(extraFreq, 7);
             } else {
                 auto [huffmanCode, huffmanLength] = codeLengthTree.getMapping(code);
+
                 bitWriter.writeBitsFromMSB(huffmanCode, huffmanLength);
             }
         }
@@ -433,78 +447,54 @@ private:
         std::println("  Code length symbols used: {}", maxIndex + 1);
     }
 
-    static std::vector<std::pair<int, int>> _getDeflateRLE(const std::vector<std::pair<int, int>>& huffmanCodeTable) {
+    static auto _getDeflateRLE(const std::vector<std::pair<int, int>>& huffmanCodeTable) {
         std::vector<std::pair<int, int>> result;
 
         if (huffmanCodeTable.empty()) {
             return result;
         }
 
-        int nowValue = huffmanCodeTable.front().second;
-        int frequency = 0;
+        for (int i = 0; i < huffmanCodeTable.size(); i++) {
+            auto [symbol, length] = huffmanCodeTable[i];
 
-        for (auto& [huffmanCode, huffmanLength] : huffmanCodeTable) {
-            if (huffmanLength != nowValue) {
-                if (frequency >= 3 && frequency <= 10 && nowValue == 0) {  // use 17 to encode
+            int repeatCount = 1;
 
-                    uint8_t extraFreq = static_cast<uint8_t>(frequency - 3);
-                    result.push_back({static_cast<uint16_t>(17), extraFreq});
-                } else if (frequency >= 4 && frequency <= 6) {  // use 16 to encode
-                    result.push_back({static_cast<uint16_t>(nowValue), 0});
-                    uint8_t extraFreq = static_cast<uint8_t>(frequency - 4);
-                    result.push_back({static_cast<uint16_t>(16), extraFreq});
-                } else if (frequency > 10 && nowValue == 0) {  // use 18 to encode
+            for (int j = i + 1; j < huffmanCodeTable.size(); j++) {
+                auto [nextSymbol, nextLength] = huffmanCodeTable[j];
 
-                    while (frequency >= 11) {
-                        int chunk = std::min(frequency, 138);  // 18碼最大重複138次(11+127)
-                        uint8_t extraFreq = static_cast<uint8_t>(chunk - 11);
-                        result.push_back({static_cast<uint16_t>(18), extraFreq});
-                        frequency -= chunk;
-                    }
-                    // 處理剩餘的frequency(如果有的話)
-                    for (int i = 0; i < frequency; i++) {
-                        result.push_back({static_cast<uint16_t>(nowValue), 0});
-                    }
+                if (nextLength == length) {
+                    repeatCount++;
                 } else {
-                    for (int i = 0; i < frequency; i++) {
-                        result.push_back({static_cast<uint16_t>(nowValue), 0});
+                    break;
+                }
+            }
+
+            if (length == 0 && repeatCount >= 3) {  // code 17
+                if (repeatCount < 11) {
+                    result.emplace_back(17, static_cast<uint8_t>(repeatCount - 3));
+                } else {
+                    if (repeatCount > 138) {
+                        repeatCount = 138;
                     }
+                    result.emplace_back(18, static_cast<uint8_t>(repeatCount - 11));
                 }
-
-                frequency = 1;
-                nowValue = huffmanLength;
+                i += repeatCount - 1;
             } else {
-                frequency++;
-                // }
+                if (repeatCount > 3) {
+                    // emplace back the first one
+                    result.emplace_back(static_cast<uint8_t>(length), 0);
+                    repeatCount -= 1;
+                    if (repeatCount > 6) {
+                        repeatCount = 6;
+                    }
+                    result.emplace_back(16, static_cast<uint8_t>(repeatCount - 3));  // need to delete the first one
+                    i += repeatCount;
+                } else {
+                    result.emplace_back(static_cast<uint8_t>(length), 0);  // code 0-15
+                }
             }
         }
 
-        if (frequency > 0) {
-            if (frequency >= 3 && frequency <= 10 && nowValue == 0) {  // use 17 to encode
-                uint8_t extraFreq = static_cast<uint8_t>(frequency - 3);
-                result.push_back({static_cast<uint16_t>(17), extraFreq});
-            } else if (frequency >= 4 && frequency <= 6) {  // use 16 to encode
-                result.push_back({static_cast<uint16_t>(nowValue), 0});
-                uint8_t extraFreq = static_cast<uint8_t>(frequency - 4);
-                result.push_back({static_cast<uint16_t>(16), extraFreq});
-            } else if (frequency > 10 && nowValue == 0) {  // use 18 to encode
-
-                while (frequency >= 11) {
-                    int chunk = std::min(frequency, 138);  // 18碼最大重複138次(11+127)
-                    uint8_t extraFreq = static_cast<uint8_t>(chunk - 11);
-                    result.push_back({static_cast<uint16_t>(18), extraFreq});
-                    frequency -= chunk;
-                }
-                // 處理剩餘的frequency(如果有的話)
-                for (int i = 0; i < frequency; i++) {
-                    result.push_back({static_cast<uint16_t>(nowValue), 0});
-                }
-            } else {
-                for (int i = 0; i < frequency; i++) {
-                    result.push_back({static_cast<uint16_t>(nowValue), 0});
-                }
-            }
-        }
         return result;
     }
 
@@ -517,28 +507,6 @@ private:
         }
 
         return (b << 16) | a;
-    }
-
-    static auto _runLengthEncode(const std::vector<uint16_t>& data) {
-        std::vector<std::pair<uint16_t, uint16_t>> encodedData;
-        if (data.empty()) {
-            return encodedData;
-        }
-
-        uint16_t currentValue = data[0];
-        uint16_t count = 1;
-
-        for (size_t i = 1; i < data.size(); i++) {
-            if (data[i] == currentValue) {
-                count++;
-            } else {
-                encodedData.emplace_back(currentValue, count);
-                currentValue = data[i];
-                count = 1;
-            }
-        }
-        encodedData.emplace_back(currentValue, count);
-        return encodedData;
     }
     static consteval auto _buildFixedHuffmanTable() {
         std::array<FixedHuffmanCode, 288> fixedHuffmanCodesTable{};

@@ -312,7 +312,7 @@ public:
             /* 我的超人 https://www.v2ex.com/t/845486 */
             /* 感謝您  mikewang  */
             /* 太強了 */
-            freq_table[256] = 1;
+            freq_table[256] = 0;
         }
         std::priority_queue<node_ptr, std::vector<node_ptr>, std::function<bool(const node_ptr&, const node_ptr&)>> pq(
             [this](const node_ptr& a, const node_ptr& b) {

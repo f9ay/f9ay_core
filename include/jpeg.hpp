@@ -504,9 +504,10 @@ private:
                 Matrix<T> block(N, M);
                 for (int k = 0; k < N; k++) {
                     for (int l = 0; l < M; l++) {
-                        // 希望編譯器會優化
                         if (i * N + k >= mtx.row() || j * M + l >= mtx.col()) [[unlikely]] {
-                            block[k, l] = 128;  // TODO 先填 128 後面再改
+                            int x_diff = std::abs(i * N + k - (mtx.row() - 1));
+                            int y_diff = std::abs(j * M + l - (mtx.col() - 1));
+                            block[k, l] = mtx[mtx.row() - 1 - x_diff, mtx.col() - 1 - y_diff];
                         } else {
                             block[k, l] = mtx[i * N + k, j * M + l];
                         }
@@ -571,6 +572,9 @@ private:
         }
         if (arr.back() == 0) {
             rle.emplace_back(0x00, 0);  // EOB -- end of block
+        }
+        if (rle.size() > 63) {
+            throw std::runtime_error("...");
         }
         return rle;
     }

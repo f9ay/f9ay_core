@@ -293,7 +293,7 @@ public:
         other.cols = 0;
     }
 
-    Matrix inverse() const {
+    [[nodiscard]] Matrix transpose() const {
         Matrix result(cols, rows);
         for (int i = 0; i < rows; i++) {
             for (int j = 0; j < cols; j++) {

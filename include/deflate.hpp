@@ -21,47 +21,14 @@ template <BlockType blockType>
 class Deflate {
 public:
     template <typename T>
-    static std::pair<std::unique_ptr<std::byte[]>, size_t> compress(Matrix<T>& matrix, FilterType filterType) {
+    static std::pair<std::unique_ptr<std::byte[]>, size_t> compress(Matrix<T>& img, FilterType filterType) {
         // Compress the input data
 
-        switch (blockType) {
-            case BlockType::Uncompressed:
-                break;
-            case BlockType::Fixed:
-                return _compressFixed(matrix, filterType);
-            case BlockType::Dynamic:
-                return _compressDynamic(matrix, filterType);
-        }
-        throw std::runtime_error("Unsupported block type");
-    }
+        BitWriter bitWriter;
 
-private:
-    struct FixedHuffmanCode {
-        uint16_t bitCode;
-        uint16_t length;
-    };
+        auto filteredMatrix = filter(img, filterType);
 
-    struct FixedLengthCode {
-        uint16_t code;
-        uint8_t extraBit;
-        uint16_t extraBitLength;
-    };
-
-    struct FixedDistanceCode {
-        uint8_t code;
-        uint16_t extraBit;
-        uint8_t extraBitLength;
-    };
-
-    template <typename T>
-    static std::pair<std::unique_ptr<std::byte[]>, size_t> _compressFixed(
-        Matrix<T>& origMatrix, FilterType filterType) {
-        static_assert(_fixedDistanceTable.size() == 32769, "Fixed distance table size mismatch");
-        static_assert(_fixedHuffmanCodesTable.size() == 288, "Fixed Huffman table size mismatch");
-        static_assert(_fixedLengthTable.size() == 259, "Fixed length table size mismatch");
-        using value_type = std::decay_t<decltype(origMatrix[0, 0])>;
-
-        auto filteredMatrix = filter(origMatrix, filterType);
+        using value_type = std::decay_t<decltype(img[0, 0])>;
 
         // expand the scanline to include the filter type
 
@@ -86,11 +53,80 @@ private:
         auto adler32 = _calculateAdler32(reinterpret_cast<std::byte*>(expandedMatrixWithFilter.raw()),
                                          expandedMatrixWithFilter.row() * expandedMatrixWithFilter.col());
 
-        BitWriter bitWriter;
-
         // write zlib header
         bitWriter.writeBitsFromMSB(std::byte{0x78}, 8);  // CMF
         bitWriter.writeBitsFromMSB(std::byte{0x01}, 8);  // FLG
+
+        switch (blockType) {
+            case BlockType::Uncompressed:
+
+                throw std::runtime_error("Uncompressed block type is not supported in this implementation");
+            case BlockType::Fixed:
+                _compressFixed(expandedMatrixWithFilter, filterType, bitWriter);
+                break;
+            case BlockType::Dynamic:
+                // need split the matrix into blocks
+                // and compress each block separately
+                // the blockSize is coloums * rowSizePerBlock
+                constexpr int rowSizePerBlock = 1000;
+
+                if (expandedMatrixWithFilter.row() > rowSizePerBlock) {
+                    // split the matrix into blocks
+                    int numRowBlocks = (expandedMatrixWithFilter.row() + rowSizePerBlock - 1) / rowSizePerBlock;
+                    for (int block_idx = 0; block_idx < numRowBlocks; ++block_idx) {
+                        int startRow = block_idx * rowSizePerBlock;
+                        int currentBlockRows = std::min(rowSizePerBlock, expandedMatrixWithFilter.row() - startRow);
+
+                        // Create a Matrix for the current block.
+                        // This constructor Matrix(T* data, int rows, int cols) creates a view,
+                        // it does not copy the data.
+                        Matrix<std::byte> block(
+                            expandedMatrixWithFilter.raw() + startRow * expandedMatrixWithFilter.col(),
+                            currentBlockRows, expandedMatrixWithFilter.col());
+
+                        // Determine BFINAL: 1 if it's the last block, 0 otherwise.
+                        uint8_t bfinal_flag = (block_idx == numRowBlocks - 1) ? 1 : 0;
+                        _compressDynamic(block, filterType, bitWriter, bfinal_flag);
+                    }
+                } else {
+                    _compressDynamic(expandedMatrixWithFilter, filterType, bitWriter, 1);
+                }
+                break;
+        }
+
+        // write adler32 checksum
+        bitWriter.writeBitsFromMSB(adler32, 32);  // ADLER32
+        // write the compressed data
+        auto buffer = bitWriter.getBuffer();
+        auto compressedData = std::make_unique<std::byte[]>(buffer.size());
+        std::copy(buffer.begin(), buffer.end(), compressedData.get());
+        return {std::move(compressedData), buffer.size()};
+    }
+
+private:
+    struct FixedHuffmanCode {
+        uint16_t bitCode;
+        uint16_t length;
+    };
+
+    struct FixedLengthCode {
+        uint16_t code;
+        uint8_t extraBit;
+        uint16_t extraBitLength;
+    };
+
+    struct FixedDistanceCode {
+        uint8_t code;
+        uint16_t extraBit;
+        uint8_t extraBitLength;
+    };
+
+    template <typename T>
+    static void _compressFixed(Matrix<T>& img, FilterType filterType, BitWriter& bitWriter) {
+        static_assert(_fixedDistanceTable.size() == 32769, "Fixed distance table size mismatch");
+        static_assert(_fixedHuffmanCodesTable.size() == 288, "Fixed Huffman table size mismatch");
+        static_assert(_fixedLengthTable.size() == 259, "Fixed length table size mismatch");
+        using value_type = std::decay_t<decltype(img[0, 0])>;
 
         // start change write from MSB to LSB
         // according to deflate spec
@@ -101,7 +137,7 @@ private:
         bitWriter.writeBitsFromLSB(std::byte{0b00000001},
                                    2);  // BTYPE (fixed)
 
-        auto flattened = expandedMatrixWithFilter.flattenToSpan();
+        auto flattened = img.flattenToSpan();
         // Apply LZ77 compression
         auto vec = LZ77::lz77EncodeSlow(flattened);
 
@@ -151,57 +187,15 @@ private:
         }
 
         bitWriter.changeWriteSequence(WriteSequence::MSB);
-
-        // adler32 = checkAndSwapToBigEndian(adler32);
-
-        // write adler32
-        bitWriter.writeBitsFromMSB(adler32, 32);
-
-        while (bitWriter.getBitPos() % 8 != 0) {
-            bitWriter.writeBit(0);
-        }
-        auto buffer = bitWriter.getBuffer();
-
-        auto size = buffer.size();
-
-        auto compressedData = std::make_unique<std::byte[]>(size);
-        std::copy(buffer.begin(), buffer.end(), compressedData.get());
-        return {std::move(compressedData), size};
     }
     template <typename T>
-    static std::pair<std::unique_ptr<std::byte[]>, size_t> _compressDynamic(
-        Matrix<T>& origMatrix, FilterType filterType) {
+    static void _compressDynamic(Matrix<T>& img, FilterType filterType, BitWriter& bitWriter, uint8_t BFINAL = 1) {
         static_assert(_fixedDistanceTable.size() == 32769, "Fixed distance table size mismatch");
         static_assert(_fixedHuffmanCodesTable.size() == 288, "Fixed Huffman table size mismatch");
         static_assert(_fixedLengthTable.size() == 259, "Fixed length table size mismatch");
-        using value_type = std::decay_t<decltype(origMatrix[0, 0])>;
+        using value_type = std::decay_t<decltype(img[0, 0])>;
 
-        auto filteredMatrix = filter(origMatrix, filterType);
-
-        // expand the scanline to include the filter type
-
-        auto filterTypeByte = static_cast<std::byte>(static_cast<uint8_t>(filterType));
-
-        auto expandedRaw = reinterpret_cast<std::byte*>(filteredMatrix.raw());
-
-        auto expandedMatrix =
-            Matrix{expandedRaw, filteredMatrix.row(), filteredMatrix.col() * static_cast<int>(sizeof(value_type))};
-
-        Matrix<std::byte> expandedMatrixWithFilter(expandedMatrix.row(), expandedMatrix.col() + 1);
-
-        for (int i = 0; i < expandedMatrix.row(); i++) {
-            expandedMatrixWithFilter[i][0] = filterTypeByte;
-            for (int j = 0; j < expandedMatrix.col(); ++j) {
-                expandedMatrixWithFilter[i][j + 1] = expandedMatrix[i][j];
-            }
-        }
-
-        // calculate the adler32 checksum
-
-        auto adler32 = _calculateAdler32(reinterpret_cast<std::byte*>(expandedMatrixWithFilter.raw()),
-                                         expandedMatrixWithFilter.row() * expandedMatrixWithFilter.col());
-
-        auto lz77Compressed = LZ77::lz77EncodeSlow(expandedMatrixWithFilter.flattenToSpan());  // Apply LZ77 compression
+        auto lz77Compressed = LZ77::lz77EncodeSlow(img.flattenToSpan());  // Apply LZ77 compression
 
         // Build Huffman tree for dynamic compression
         Huffman_tree litLengthTree;
@@ -285,18 +279,12 @@ private:
         std::println("paddedLitLengthCodes : {0}", paddedLitLengthCodes);
         std::println("paddedDistanceCodes : {0}", paddedDistanceCodes);
 
-        BitWriter bitWriter;
-
-        // write zlib header
-        bitWriter.writeBitsFromMSB(std::byte{0x78}, 8);  // CMF
-        bitWriter.writeBitsFromMSB(std::byte{0x01}, 8);  // FLG
-
         // start change write from MSB to LSB
         // according to deflate spec
 
         bitWriter.changeWriteSequence(WriteSequence::LSB);
         // write the block header
-        bitWriter.writeBit(1);  // BFINAL 1 == last block
+        bitWriter.writeBit(BFINAL);  // BFINAL 1 == last block
         bitWriter.writeBitsFromLSB(std::byte{0b00000010},
                                    2);  // BTYPE (dynamic)
 
@@ -346,14 +334,6 @@ private:
         }
 
         bitWriter.changeWriteSequence(WriteSequence::MSB);
-        // write adler32
-        bitWriter.writeBitsFromMSB(adler32, 32);
-
-        auto buffer = bitWriter.getBuffer();
-        auto compressedData = std::make_unique<std::byte[]>(buffer.size());
-
-        std::copy(buffer.begin(), buffer.end(), compressedData.get());
-        return {std::move(compressedData), buffer.size()};
     }
 
     static void _writeCodeLengths(BitWriter& bitWriter, const std::vector<std::pair<int, int>>& litLengthCodes,

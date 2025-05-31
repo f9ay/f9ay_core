@@ -1,6 +1,8 @@
 #pragma once
 
+#ifdef __AVX__
 #include <immintrin.h>
+#endif
 
 #include <cmath>
 #include <numbers>

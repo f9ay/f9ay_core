@@ -1,15 +1,13 @@
 #pragma once
 
+#include <immintrin.h>
+
 #include <cmath>
 #include <numbers>
 
 #include "matrix.hpp"
 #include "matrix_concept.hpp"
 #include "matrix_view.hpp"
-
-#ifdef _M_IX86
-#include <immintrin.h>
-#endif
 
 namespace f9ay {
 

@@ -54,7 +54,35 @@ public:
         // write signature to buffer
         // compress first to get size and data
 
-        auto [compressedData, compressedSize] = deflate::Deflate<deflate::BlockType::Dynamic>::compress(matrix);
+        // force the color type to be RGB
+
+        auto rgbMatrix = matrix.trans_convert([](const auto& origColor) {
+            return colors::color_cast<colors::RGB>(origColor);
+        });
+
+        // then apply filter
+
+        constexpr auto filterType = FilterType::Sub;
+
+        auto filteredMatrix = deflate::filter(rgbMatrix, filterType);
+
+        // padding the first column with filter type
+
+        auto rawDataByte = reinterpret_cast<const std::byte*>(filteredMatrix.raw());
+
+        auto expandedMatrix =
+            Matrix<std::byte>(rawDataByte, filteredMatrix.row(), filteredMatrix.col() * sizeof(ElementType));
+
+        auto paddedMatrix = Matrix<std::byte>(expandedMatrix.row(), expandedMatrix.col() + 1);
+
+        for (size_t i = 0; i < paddedMatrix.row(); i++) {
+            paddedMatrix[i][0] = static_cast<std::byte>(filterType);
+            for (size_t j = 1; j < paddedMatrix.col(); j++) {
+                paddedMatrix[i][j] = expandedMatrix[i][j - 1];
+            }
+        }
+
+        auto [compressedData, compressedSize] = deflate::Deflate<deflate::BlockType::Dynamic>::compress(paddedMatrix);
 
         size_t size =
             sizeof(PNGSignature) + /* PNG簽名  */

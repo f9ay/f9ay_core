@@ -21,40 +21,15 @@ template <BlockType blockType>
 class Deflate {
 public:
     template <typename T>
-    static std::pair<std::unique_ptr<std::byte[]>, size_t> compress(const Matrix<T>& img) {
+    static std::pair<std::unique_ptr<std::byte[]>, size_t> compress(Matrix<T>& img) {
         // Compress the input data
 
         BitWriter bitWriter;
-
-        constexpr FilterType filterType = FilterType::Sub;
-
-        auto filteredMatrix = filter(img, filterType);
-
-        using value_type = std::decay_t<decltype(img[0, 0])>;
-
-        // expand the scanline to include the filter type
-
-        auto filterTypeByte = static_cast<std::byte>(static_cast<uint8_t>(filterType));
-
-        auto expandedRaw = reinterpret_cast<std::byte*>(filteredMatrix.raw());
-
-        auto expandedMatrix =
-            Matrix{expandedRaw, filteredMatrix.row(), filteredMatrix.col() * static_cast<int>(sizeof(value_type))};
-
-        Matrix<std::byte> expandedMatrixWithFilter(expandedMatrix.row(), expandedMatrix.col() + 1);
-
-        for (int i = 0; i < expandedMatrix.row(); i++) {
-            expandedMatrixWithFilter[i][0] = filterTypeByte;
-            for (int j = 0; j < expandedMatrix.col(); ++j) {
-                expandedMatrixWithFilter[i][j + 1] = expandedMatrix[i][j];
-            }
-        }
-
-        std::span<std::byte> expandedMatrixWithFilterSpan = expandedMatrixWithFilter.flattenToSpan();
         // calculate the adler32 checksum
 
-        auto adler32 = _calculateAdler32(reinterpret_cast<std::byte*>(expandedMatrixWithFilter.raw()),
-                                         expandedMatrixWithFilter.row() * expandedMatrixWithFilter.col());
+        auto adler32 = _calculateAdler32(reinterpret_cast<std::byte*>(img.raw()), img.row() * img.col());
+
+        auto imgSpan = img.flattenToSpan();
 
         bitWriter.changeWriteSequence(WriteSequence::MSB);
 
@@ -67,10 +42,10 @@ public:
 
                 throw std::runtime_error("Uncompressed block type is not supported in this implementation");
             case BlockType::Fixed:
-                _compressFixed(expandedMatrixWithFilterSpan, filterType, bitWriter);
+                _compressFixed(imgSpan, bitWriter);
                 break;
             case BlockType::Dynamic:
-                _compressDynamic(expandedMatrixWithFilterSpan, filterType, bitWriter, 1);
+                _compressDynamic(imgSpan, bitWriter, 1);
                 break;
         }
 
@@ -103,7 +78,7 @@ private:
     };
 
     template <typename T>
-    static void _compressFixed(std::span<T> imgSpan, FilterType filterType, BitWriter& bitWriter) {
+    static void _compressFixed(std::span<T> imgSpan, BitWriter& bitWriter) {
         static_assert(_fixedDistanceTable.size() == 32769, "Fixed distance table size mismatch");
         static_assert(_fixedHuffmanCodesTable.size() == 288, "Fixed Huffman table size mismatch");
         static_assert(_fixedLengthTable.size() == 259, "Fixed length table size mismatch");
@@ -168,8 +143,7 @@ private:
         bitWriter.changeWriteSequence(WriteSequence::MSB);
     }
     template <typename T>
-    static void _compressDynamic(const std::span<T>& flattened, FilterType filterType, BitWriter& bitWriter,
-                                 uint8_t BFINAL = 1) {
+    static void _compressDynamic(const std::span<T>& flattened, BitWriter& bitWriter, uint8_t BFINAL = 1) {
         static_assert(_fixedDistanceTable.size() == 32769, "Fixed distance table size mismatch");
         static_assert(_fixedHuffmanCodesTable.size() == 288, "Fixed Huffman table size mismatch");
         static_assert(_fixedLengthTable.size() == 259, "Fixed length table size mismatch");

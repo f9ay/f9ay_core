@@ -88,6 +88,13 @@ public:
 
                     int length = std::distance(dictMatchBegin, dictMatchEnd);
 
+                    if (length < 3) {
+                        // if the length is less than 3
+                        // then we just push back the literal value
+                        result.emplace_back(0, 0, *bufferBegin);
+                        bufferBegin++;
+                        continue;
+                    }
                     if (lookheadEnd == container.end()) {
                         // if the lookahead end is the end of the container
                         // then we need to push back the last character
@@ -181,7 +188,7 @@ public:
                     hashTable[hashKey].emplace_back(bufferBegin);
 
                     // then emplace the longest match
-                    if (maxLength > 0) {
+                    if (maxLength >= 3 && offset > 0) {
                         result.emplace_back(
                             offset, maxLength,
                             (maxMatchEnd != container.end()) ? std::make_optional(*maxMatchEnd) : std::nullopt);

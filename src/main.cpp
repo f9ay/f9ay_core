@@ -26,7 +26,7 @@ using namespace f9ay;
 
 int main(int argc, char** argv) {
     std::filesystem::path path = std::source_location::current().file_name();
-    path = path.parent_path().parent_path() / "test_data" / "640mb.bmp";
+    path = path.parent_path().parent_path() / "test_data" / "1.bmp";
     std::cout << path << std::endl;
     std::ifstream fs(path, std::ios::binary);
     if (!fs.is_open()) {
@@ -52,7 +52,7 @@ int main(int argc, char** argv) {
     std::ofstream out(path.parent_path() / "current.jpeg", std::ios::binary);
     out.write(reinterpret_cast<const char*>(buffer.get()), size);
 
-    // auto res = std::get<Matrix<colors::BGR>>(result);
+    auto res = std::get<Matrix<colors::BGR>>(result);
     // Matrix<colors::RGB> mtx(res.row(), res.col());
     // for (auto i = 0; i < res.row(); i++) {
     //     for (auto j = 0; j < res.col(); j++) {
@@ -61,6 +61,31 @@ int main(int argc, char** argv) {
     //         mtx[i, j].b = res[i, j].b;
     //     }
     // }
+    std::visit(
+        [&path](auto&& arg) {
+            std::ofstream out(path.parent_path() / "test.png", std::ios::binary);
+
+            auto rgbMtx = arg.trans_convert([](const auto& color) {
+                return colors::color_cast<colors::RGB>(color);
+            });
+
+            Matrix<colors::RGB> mtx(1, 1);
+            mtx[0, 0] = {0xFF, 0x00, 0x00};
+
+            auto [buffer, size] = PNG::exportToByte(rgbMtx, FilterType::Sub);
+            out.write(reinterpret_cast<const char*>(buffer.get()), size);
+        },
+        result);
+    //
+    // std::string test = "aaabbaaa";
+    //
+    // auto vec = LZ77::lz77EncodeSlow(test);
+    // for (auto [offset, length, value] : vec) {
+    //     std::cout << "Offset: " << offset << ", Length: " << length << ", Value: " << (value.has_value() ? *value
+    //     : '
+    //     ')
+    //               << "\n";
+    // }
     // std::visit(
     //     [&path](auto&& arg) {
     //         std::ofstream out(path.parent_path() / "test.png", std::ios::binary);
@@ -68,9 +93,6 @@ int main(int argc, char** argv) {
     //         auto rgbMtx = arg.trans_convert([](const auto& color) {
     //             return colors::color_cast<colors::RGB>(color);
     //         });
-    //
-    //         Matrix<colors::RGB> mtx(1, 1);
-    //         mtx[0, 0] = {0xFF, 0x00, 0x00};
     //
     //         auto [buffer, size] = PNG::exportToByte(rgbMtx, FilterType::Sub);
     //         out.write(reinterpret_cast<const char*>(buffer.get()), size);
@@ -86,26 +108,11 @@ int main(int argc, char** argv) {
     //     ')
     //               << "\n";
     // }
-    // std::visit(
-    //     [&path](auto&& arg) {
-    //         std::ofstream out(path.parent_path() / "test.png", std::ios::binary);
-    //
-    //         auto rgbMtx = arg.trans_convert([](const auto& color) {
-    //             return colors::color_cast<colors::RGB>(color);
-    //         });
-    //
-    //         auto [buffer, size] = PNG::exportToByte(rgbMtx, FilterType::Sub);
-    //         out.write(reinterpret_cast<const char*>(buffer.get()), size);
-    //     },
-    //     result);
-    //
-    // std::string test = "aaabbaaa";
-    //
-    // auto vec = LZ77::lz77EncodeSlow(test);
-    // for (auto [offset, length, value] : vec) {
-    //     std::cout << "Offset: " << offset << ", Length: " << length << ", Value: " << (value.has_value() ? *value
-    //     : '
-    //     ')
-    //               << "\n";
-    // }
+    // auto start = std::chrono::high_resolution_clock::now();
+    // auto [buffer, size] = Jpeg::write(mtx);
+    // auto end = std::chrono::high_resolution_clock::now();
+    // std::println("{}", std::chrono::duration_cast<std::chrono::milliseconds>(end - start));
+
+    // std::ofstream out(path.parent_path() / "current.jpeg", std::ios::binary);
+    // out.write(reinterpret_cast<const char*>(buffer.get()), size);
 }

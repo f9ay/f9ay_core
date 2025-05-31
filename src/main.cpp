@@ -26,7 +26,7 @@ using namespace f9ay;
 
 int main(int argc, char** argv) {
     std::filesystem::path path = std::source_location::current().file_name();
-    path = path.parent_path().parent_path() / "test_data" / "fire.bmp";
+    path = path.parent_path().parent_path() / "test_data" / "firet.bmp";
     std::cout << path << std::endl;
     std::ifstream fs(path, std::ios::binary);
     if (!fs.is_open()) {
@@ -51,8 +51,6 @@ int main(int argc, char** argv) {
 
     std::ofstream out(path.parent_path() / "current.jpeg", std::ios::binary);
     out.write(reinterpret_cast<const char*>(buffer.get()), size);
-
-    auto res = std::get<Matrix<colors::BGR>>(result);
     // Matrix<colors::RGB> mtx(res.row(), res.col());
     // for (auto i = 0; i < res.row(); i++) {
     //     for (auto j = 0; j < res.col(); j++) {

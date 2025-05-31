@@ -57,7 +57,11 @@ public:
         // force the color type to be RGB
 
         auto rgbMatrix = matrix.trans_convert([](const auto& origColor) {
-            return colors::color_cast<colors::RGB>(origColor);
+            if constexpr (sizeof(ElementType) == 4) {
+                return colors::color_cast<colors::RGBA>(origColor);
+            } else {
+                return colors::color_cast<colors::RGB>(origColor);
+            }
         });
 
         // then apply filter

@@ -21,10 +21,12 @@ template <BlockType blockType>
 class Deflate {
 public:
     template <typename T>
-    static std::pair<std::unique_ptr<std::byte[]>, size_t> compress(Matrix<T>& img, FilterType filterType) {
+    static std::pair<std::unique_ptr<std::byte[]>, size_t> compress(Matrix<T>& img) {
         // Compress the input data
 
         BitWriter bitWriter;
+
+        constexpr FilterType filterType = FilterType::Sub;
 
         auto filteredMatrix = filter(img, filterType);
 

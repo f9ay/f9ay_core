@@ -48,8 +48,8 @@ class PNG {
     static_assert(sizeof(IENDChunk) == 4);
 
 public:
-    template <MATRIX_CONCEPT Matrix_Type>
-    static std::pair<std::unique_ptr<std::byte[]>, size_t> exportToByte(Matrix_Type& matrix) {
+    template <typename T>
+    static std::pair<std::unique_ptr<std::byte[]>, size_t> exportToByte(const Matrix<T>& matrix) {
         using ElementType = std::decay_t<decltype(matrix[0][0])>;
         // write signature to buffer
         // compress first to get size and data

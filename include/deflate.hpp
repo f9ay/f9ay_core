@@ -84,7 +84,7 @@ public:
                 //         _compressDynamic(blockSpan, filterType, bitWriter, i == numBlocks - 1 ? 1 : 0);
                 //     }
                 // } else {
-                    _compressDynamic(expandedMatrixWithFilterSpan, filterType, bitWriter, 1);
+                _compressDynamic(expandedMatrixWithFilterSpan, filterType, bitWriter, 1);
                 // }
                 break;
         }
@@ -194,8 +194,6 @@ private:
 
         auto lz77Compressed = LZ77::lz77EncodeSlow(flattened);  // Apply LZ77 compression
 
-        std::println("BFINAL : {}", BFINAL);
-
         // Build Huffman tree for dynamic compression
         Huffman_tree litLengthTree;
         Huffman_tree distanceTree;
@@ -240,17 +238,13 @@ private:
 
         for (auto& [symbol, length] : litLengthCodes) {
             auto [litCode, litLength] = litLengthTree.getMapping(symbol);
-            std::println("litLengthCode : {}", to_str(litCode, litLength));
         }
 
         for (auto& [symbol, length] : distanceCodes) {
             auto [distCode, distLength] = distanceTree.getMapping(symbol);
-            std::println("distanceCode : {}", to_str(distCode, distLength));
         }
 
         // print the litLengthCodes and distanceCodes for debugging
-        std::println("litLengthCodes : {0}", litLengthCodes);
-        std::println("distanceCodes : {0}", distanceCodes);
 
         // padding with zero if the symbol doesn't exist
 
@@ -287,8 +281,6 @@ private:
             paddedDistanceCodes.emplace_back(1, 1);
         }
         // print the padded litLengthCodes and distanceCodes for debugging
-        std::println("paddedLitLengthCodes : {0}", paddedLitLengthCodes);
-        std::println("paddedDistanceCodes : {0}", paddedDistanceCodes);
 
         // start change write from MSB to LSB
         // according to deflate spec
@@ -352,13 +344,9 @@ private:
         auto litLengthRLE = _getDeflateRLE(litLengthCodes);
         auto distRLE = _getDeflateRLE(distanceCodes);
 
-        std::println("litLengthRLE : {0}", litLengthRLE);
-        std::println("distRLE : {0}", distRLE);
         decltype(litLengthRLE) combinedRLE;
         combinedRLE.insert(combinedRLE.end(), litLengthRLE.begin(), litLengthRLE.end());
         combinedRLE.insert(combinedRLE.end(), distRLE.begin(), distRLE.end());
-
-        std::println("combinedRLE : {0}", combinedRLE);
 
         // build Code Lengths huffman tree
         Huffman_tree codeLengthTree;
@@ -370,8 +358,6 @@ private:
         codeLengthTree.build<7, true>();
 
         auto codeLengthHuffmanTable = codeLengthTree.get_standard_huffman_table();
-
-        std::println("codeLengthHuffmanTable : {0}", codeLengthHuffmanTable);
 
         std::array<int, 19> codeLengthArray = {0};
 
@@ -393,11 +379,7 @@ private:
         uint8_t hdist = static_cast<uint8_t>(distanceCodes.size() - 1);
         uint8_t hclen = static_cast<uint8_t>(maxIndex + 1 - 4);
 
-        std::println("HLIT: {0}, HDIST: {1}, HCLEN: {2}", hlit, hdist, hclen);
-
-        std::println("Writing CL lengths in order:");
         for (int i = 0; i <= maxIndex; i++) {
-            std::println("  CL[{}] (symbol {}): {}", i, _rleOrder[i], codeLengthArray[i]);
         }
 
         if (maxIndex < 3) {
@@ -409,14 +391,11 @@ private:
         bitWriter.writeBitsFromLSB(hdist, 5);
         bitWriter.writeBitsFromLSB(hclen, 4);
 
-        std::println("Writing code lengths: {0}", codeLengthArray);
-
         for (int i = 0; i <= maxIndex; i++) {
             bitWriter.writeBitsFromLSB(codeLengthArray[i], 3);
         }
 
         for (auto& [code, extraFreq] : combinedRLE) {
-            std::println("Writing RLE: code={}, extraFreq={}", code, extraFreq);
             auto [huffmanCode, huffmanLength] = codeLengthTree.getMapping(code);
 
             bitWriter.writeBitsFromMSB(huffmanCode, huffmanLength);
@@ -428,11 +407,6 @@ private:
                 bitWriter.writeBitsFromLSB(extraFreq, 7);
             }
         }
-        std::println("Final verification:");
-        std::println("  Total lit/length symbols: {}", litLengthCodes.size());
-        std::println("  Total distance symbols: {}", distanceCodes.size());
-        std::println("  RLE sequence length: {}", combinedRLE.size());
-        std::println("  Code length symbols used: {}", maxIndex + 1);
     }
 
     static auto _getDeflateRLE(const std::vector<std::pair<int, int>>& huffmanCodeTable) {

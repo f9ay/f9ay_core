@@ -72,7 +72,7 @@ int main(int argc, char** argv) {
             Matrix<colors::RGB> mtx(1, 1);
             mtx[0, 0] = {0xFF, 0x00, 0x00};
 
-            auto [buffer, size] = PNG::exportToByte(rgbMtx, FilterType::Sub);
+            auto [buffer, size] = PNG::exportToByte(rgbMtx);
             out.write(reinterpret_cast<const char*>(buffer.get()), size);
         },
         result);

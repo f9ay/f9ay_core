@@ -49,13 +49,12 @@ class PNG {
 
 public:
     template <MATRIX_CONCEPT Matrix_Type>
-    static std::pair<std::unique_ptr<std::byte[]>, size_t> exportToByte(Matrix_Type& matrix, FilterType filterType) {
+    static std::pair<std::unique_ptr<std::byte[]>, size_t> exportToByte(Matrix_Type& matrix) {
         using ElementType = std::decay_t<decltype(matrix[0][0])>;
         // write signature to buffer
         // compress first to get size and data
 
-        auto [compressedData, compressedSize] =
-            deflate::Deflate<deflate::BlockType::Dynamic>::compress(matrix, filterType);
+        auto [compressedData, compressedSize] = deflate::Deflate<deflate::BlockType::Dynamic>::compress(matrix);
 
         size_t size =
             sizeof(PNGSignature) + /* PNG簽名  */

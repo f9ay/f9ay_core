@@ -188,7 +188,7 @@ public:
                     hashTable[hashKey].emplace_back(bufferBegin);
 
                     // then emplace the longest match
-                    if (maxLength >= 3 && offset > 0) {
+                    if (maxLength >= 3) {
                         result.emplace_back(
                             offset, maxLength,
                             (maxMatchEnd != container.end()) ? std::make_optional(*maxMatchEnd) : std::nullopt);

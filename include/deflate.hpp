@@ -21,7 +21,7 @@ template <BlockType blockType>
 class Deflate {
 public:
     template <typename T>
-    static std::pair<std::unique_ptr<std::byte[]>, size_t> compress(Matrix<T>& img) {
+    static std::pair<std::unique_ptr<std::byte[]>, size_t> compress(const Matrix<T>& img) {
         // Compress the input data
 
         BitWriter bitWriter;
@@ -50,6 +50,7 @@ public:
             }
         }
 
+        std::span<std::byte> expandedMatrixWithFilterSpan = expandedMatrixWithFilter.flattenToSpan();
         // calculate the adler32 checksum
 
         auto adler32 = _calculateAdler32(reinterpret_cast<std::byte*>(expandedMatrixWithFilter.raw()),
@@ -66,28 +67,10 @@ public:
 
                 throw std::runtime_error("Uncompressed block type is not supported in this implementation");
             case BlockType::Fixed:
-                _compressFixed(expandedMatrixWithFilter, filterType, bitWriter);
+                _compressFixed(expandedMatrixWithFilterSpan, filterType, bitWriter);
                 break;
             case BlockType::Dynamic:
-                // block size
-                constexpr int blockSize = 10000;
-
-                size_t imgSize = expandedMatrixWithFilter.row() * expandedMatrixWithFilter.col();
-                std::span<std::byte> expandedMatrixWithFilterSpan = expandedMatrixWithFilter.flattenToSpan();
-
-                // if (imgSize > blockSize) {
-                //     // split the image into blocks of size blockSize
-                //     auto numBlocks = (imgSize + blockSize - 1) / blockSize;  // round up division
-
-                //     for (size_t i = 0; i < numBlocks; ++i) {
-                //         size_t start = i * blockSize;
-                //         size_t end = std::min(start + blockSize, imgSize);
-                //         auto blockSpan = expandedMatrixWithFilterSpan.subspan(start, end - start);
-                //         _compressDynamic(blockSpan, filterType, bitWriter, i == numBlocks - 1 ? 1 : 0);
-                //     }
-                // } else {
                 _compressDynamic(expandedMatrixWithFilterSpan, filterType, bitWriter, 1);
-                // }
                 break;
         }
 
@@ -120,11 +103,11 @@ private:
     };
 
     template <typename T>
-    static void _compressFixed(Matrix<T>& img, FilterType filterType, BitWriter& bitWriter) {
+    static void _compressFixed(std::span<T> imgSpan, FilterType filterType, BitWriter& bitWriter) {
         static_assert(_fixedDistanceTable.size() == 32769, "Fixed distance table size mismatch");
         static_assert(_fixedHuffmanCodesTable.size() == 288, "Fixed Huffman table size mismatch");
         static_assert(_fixedLengthTable.size() == 259, "Fixed length table size mismatch");
-        using value_type = std::decay_t<decltype(img[0, 0])>;
+        using value_type = std::decay_t<decltype(imgSpan[0])>;
 
         // start change write from MSB to LSB
         // according to deflate spec
@@ -135,9 +118,8 @@ private:
         bitWriter.writeBitsFromLSB(std::byte{0b00000001},
                                    2);  // BTYPE (fixed)
 
-        auto flattened = img.flattenToSpan();
         // Apply LZ77 compression
-        auto vec = LZ77::lz77EncodeSlow(flattened);
+        auto vec = LZ77::lz77EncodeSlow(imgSpan);
 
         for (auto& [offset, length, value] : vec) {
             if (length == 0 && value.has_value()) {
@@ -160,7 +142,6 @@ private:
                 // write first 5 fixed distance bits
                 bitWriter.writeBitsFromMSB(distCode, 5);
                 if (distExtraBitLength > 0) {
-                    // check endian
                     bitWriter.writeBitsFromLSB(distExtraBit, distExtraBitLength);
                 }
 
@@ -205,18 +186,6 @@ private:
                 litLengthTree.add_one(static_cast<uint16_t>(literal.value()));
             }
             if (length > 0) {
-                if (length < 3) {
-                    throw std::runtime_error("Length must be at least 3 for dynamic compression");
-                }
-                if (distance < 0 || distance > 32768) {
-                    throw std::runtime_error("Distance must be between 0 and 32768 for dynamic compression");
-                }
-                if (length >= _fixedLengthTable.size()) {
-                    throw std::runtime_error("Length exceeds fixed length table size");
-                }
-                if (distance >= _fixedDistanceTable.size()) {
-                    throw std::runtime_error("Distance exceeds fixed distance table size");
-                }
                 litLengthTree.add_one(_fixedLengthTable[length].code);
                 distanceTree.add_one(_fixedDistanceTable[distance].code);
             }
@@ -237,16 +206,6 @@ private:
         std::ranges::sort(distanceCodes, [](const auto& a, const auto& b) {
             return a.first < b.first;
         });
-
-        for (auto& [symbol, length] : litLengthCodes) {
-            auto [litCode, litLength] = litLengthTree.getMapping(symbol);
-        }
-
-        for (auto& [symbol, length] : distanceCodes) {
-            auto [distCode, distLength] = distanceTree.getMapping(symbol);
-        }
-
-        // print the litLengthCodes and distanceCodes for debugging
 
         // padding with zero if the symbol doesn't exist
 
@@ -380,13 +339,6 @@ private:
         uint8_t hlit = static_cast<uint8_t>(litLengthCodes.size() - 257);
         uint8_t hdist = static_cast<uint8_t>(distanceCodes.size() - 1);
         uint8_t hclen = static_cast<uint8_t>(maxIndex + 1 - 4);
-
-        for (int i = 0; i <= maxIndex; i++) {
-        }
-
-        if (maxIndex < 3) {
-            throw std::runtime_error("Not enough code lengths to write, must have at least 4 code lengths.");
-        }
 
         // write the HLIT header
         bitWriter.writeBitsFromLSB(hlit, 5);

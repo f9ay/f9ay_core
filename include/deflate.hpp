@@ -53,6 +53,8 @@ public:
         auto adler32 = _calculateAdler32(reinterpret_cast<std::byte*>(expandedMatrixWithFilter.raw()),
                                          expandedMatrixWithFilter.row() * expandedMatrixWithFilter.col());
 
+        bitWriter.changeWriteSequence(WriteSequence::MSB);
+
         // write zlib header
         bitWriter.writeBitsFromMSB(std::byte{0x78}, 8);  // CMF
         bitWriter.writeBitsFromMSB(std::byte{0x01}, 8);  // FLG
@@ -65,35 +67,29 @@ public:
                 _compressFixed(expandedMatrixWithFilter, filterType, bitWriter);
                 break;
             case BlockType::Dynamic:
-                // need split the matrix into blocks
-                // and compress each block separately
-                // the blockSize is coloums * rowSizePerBlock
-                constexpr int rowSizePerBlock = 10000;
+                // block size
+                constexpr int blockSize = 10000;
 
-                if (expandedMatrixWithFilter.row() > rowSizePerBlock) {
-                    // split the matrix into blocks
-                    int numRowBlocks = (expandedMatrixWithFilter.row() + rowSizePerBlock - 1) / rowSizePerBlock;
-                    for (int block_idx = 0; block_idx < numRowBlocks; ++block_idx) {
-                        int startRow = block_idx * rowSizePerBlock;
-                        int currentBlockRows = std::min(rowSizePerBlock, expandedMatrixWithFilter.row() - startRow);
+                size_t imgSize = expandedMatrixWithFilter.row() * expandedMatrixWithFilter.col();
+                std::span<std::byte> expandedMatrixWithFilterSpan = expandedMatrixWithFilter.flattenToSpan();
 
-                        // Create a Matrix for the current block.
-                        // This constructor Matrix(T* data, int rows, int cols) creates a view,
-                        // it does not copy the data.
-                        Matrix<std::byte> block(
-                            expandedMatrixWithFilter.raw() + startRow * expandedMatrixWithFilter.col(),
-                            currentBlockRows, expandedMatrixWithFilter.col());
+                // if (imgSize > blockSize) {
+                //     // split the image into blocks of size blockSize
+                //     auto numBlocks = (imgSize + blockSize - 1) / blockSize;  // round up division
 
-                        // Determine BFINAL: 1 if it's the last block, 0 otherwise.
-                        uint8_t bfinal_flag = (block_idx == numRowBlocks - 1) ? 1 : 0;
-                        _compressDynamic(block, filterType, bitWriter, bfinal_flag);
-                    }
-                } else {
-                    _compressDynamic(expandedMatrixWithFilter, filterType, bitWriter, 1);
-                }
+                //     for (size_t i = 0; i < numBlocks; ++i) {
+                //         size_t start = i * blockSize;
+                //         size_t end = std::min(start + blockSize, imgSize);
+                //         auto blockSpan = expandedMatrixWithFilterSpan.subspan(start, end - start);
+                //         _compressDynamic(blockSpan, filterType, bitWriter, i == numBlocks - 1 ? 1 : 0);
+                //     }
+                // } else {
+                    _compressDynamic(expandedMatrixWithFilterSpan, filterType, bitWriter, 1);
+                // }
                 break;
         }
 
+        bitWriter.changeWriteSequence(WriteSequence::MSB);
         // write adler32 checksum
         bitWriter.writeBitsFromMSB(adler32, 32);  // ADLER32
         // write the compressed data
@@ -189,13 +185,16 @@ private:
         bitWriter.changeWriteSequence(WriteSequence::MSB);
     }
     template <typename T>
-    static void _compressDynamic(Matrix<T>& img, FilterType filterType, BitWriter& bitWriter, uint8_t BFINAL = 1) {
+    static void _compressDynamic(const std::span<T>& flattened, FilterType filterType, BitWriter& bitWriter,
+                                 uint8_t BFINAL = 1) {
         static_assert(_fixedDistanceTable.size() == 32769, "Fixed distance table size mismatch");
         static_assert(_fixedHuffmanCodesTable.size() == 288, "Fixed Huffman table size mismatch");
         static_assert(_fixedLengthTable.size() == 259, "Fixed length table size mismatch");
-        using value_type = std::decay_t<decltype(img[0, 0])>;
+        using value_type = std::decay_t<decltype(flattened[0])>;
 
-        auto lz77Compressed = LZ77::lz77EncodeSlow(img.flattenToSpan());  // Apply LZ77 compression
+        auto lz77Compressed = LZ77::lz77EncodeSlow(flattened);  // Apply LZ77 compression
+
+        std::println("BFINAL : {}", BFINAL);
 
         // Build Huffman tree for dynamic compression
         Huffman_tree litLengthTree;
@@ -203,9 +202,21 @@ private:
 
         for (auto& [distance, length, literal] : lz77Compressed) {
             if (literal.has_value()) {
-                litLengthTree.add_one(static_cast<decltype(length)>(literal.value()));
+                litLengthTree.add_one(static_cast<uint16_t>(literal.value()));
             }
             if (length > 0) {
+                if (length < 3) {
+                    throw std::runtime_error("Length must be at least 3 for dynamic compression");
+                }
+                if (distance < 0 || distance > 32768) {
+                    throw std::runtime_error("Distance must be between 0 and 32768 for dynamic compression");
+                }
+                if (length >= _fixedLengthTable.size()) {
+                    throw std::runtime_error("Length exceeds fixed length table size");
+                }
+                if (distance >= _fixedDistanceTable.size()) {
+                    throw std::runtime_error("Distance exceeds fixed distance table size");
+                }
                 litLengthTree.add_one(_fixedLengthTable[length].code);
                 distanceTree.add_one(_fixedDistanceTable[distance].code);
             }
@@ -282,7 +293,7 @@ private:
         // start change write from MSB to LSB
         // according to deflate spec
 
-        bitWriter.changeWriteSequence(WriteSequence::LSB);
+        bitWriter.changeWriteSequence(WriteSequence::LSB, false);
         // write the block header
         bitWriter.writeBit(BFINAL);  // BFINAL 1 == last block
         bitWriter.writeBitsFromLSB(std::byte{0b00000010},
@@ -293,7 +304,7 @@ private:
         // write actual data
         for (auto& [distance, length, literal] : lz77Compressed) {
             if (length == 0 && literal.has_value()) {
-                auto [litCode, litLength] = litLengthTree.getMapping(static_cast<decltype(length)>(literal.value()));
+                auto [litCode, litLength] = litLengthTree.getMapping(static_cast<uint16_t>(literal.value()));
 
                 bitWriter.writeBitsFromMSB(litCode, litLength);
             } else {
@@ -316,8 +327,7 @@ private:
                 }
 
                 if (literal.has_value()) {
-                    auto [litCode, litLength] =
-                        litLengthTree.getMapping(static_cast<decltype(length)>(literal.value()));
+                    auto [litCode, litLength] = litLengthTree.getMapping(static_cast<uint16_t>(literal.value()));
 
                     bitWriter.writeBitsFromMSB(litCode, litLength);
                 }
@@ -326,14 +336,15 @@ private:
 
         // write end of block
         auto [eobCode, eobLength] = litLengthTree.getMapping(256);
+
         bitWriter.writeBitsFromMSB(eobCode, eobLength);
-
         // write the last byte
-        while (bitWriter.getBitPos() % 8 != 0) {
-            bitWriter.writeBit(0);
+        if (BFINAL == 1) {
+            // check if the last byte is not aligned
+            while (bitWriter.getBitPos() % 8 != 0) {
+                bitWriter.writeBit(0);
+            }
         }
-
-        bitWriter.changeWriteSequence(WriteSequence::MSB);
     }
 
     static void _writeCodeLengths(BitWriter& bitWriter, const std::vector<std::pair<int, int>>& litLengthCodes,
@@ -374,7 +385,7 @@ private:
             }
         }
         int maxIndex = 18;
-        while (maxIndex >= 3 && codeLengthArray[maxIndex] == 0) {
+        while (maxIndex > 3 && codeLengthArray[maxIndex] == 0) {
             maxIndex--;
         }
 
@@ -387,6 +398,10 @@ private:
         std::println("Writing CL lengths in order:");
         for (int i = 0; i <= maxIndex; i++) {
             std::println("  CL[{}] (symbol {}): {}", i, _rleOrder[i], codeLengthArray[i]);
+        }
+
+        if (maxIndex < 3) {
+            throw std::runtime_error("Not enough code lengths to write, must have at least 4 code lengths.");
         }
 
         // write the HLIT header
@@ -402,22 +417,15 @@ private:
 
         for (auto& [code, extraFreq] : combinedRLE) {
             std::println("Writing RLE: code={}, extraFreq={}", code, extraFreq);
-            if (code == 16 || code == 17) {
-                auto [huffmanCode, huffmanLength] = codeLengthTree.getMapping(code);
+            auto [huffmanCode, huffmanLength] = codeLengthTree.getMapping(code);
 
-                bitWriter.writeBitsFromMSB(huffmanCode, huffmanLength);
-
-                bitWriter.writeBitsFromLSB(extraFreq, code == 16 ? 2 : 3);
+            bitWriter.writeBitsFromMSB(huffmanCode, huffmanLength);
+            if (code == 16) {
+                bitWriter.writeBitsFromLSB(extraFreq, 2);
+            } else if (code == 17) {
+                bitWriter.writeBitsFromLSB(extraFreq, 3);
             } else if (code == 18) {
-                auto [huffmanCode, huffmanLength] = codeLengthTree.getMapping(code);
-
-                bitWriter.writeBitsFromMSB(huffmanCode, huffmanLength);
-
                 bitWriter.writeBitsFromLSB(extraFreq, 7);
-            } else {
-                auto [huffmanCode, huffmanLength] = codeLengthTree.getMapping(code);
-
-                bitWriter.writeBitsFromMSB(huffmanCode, huffmanLength);
             }
         }
         std::println("Final verification:");

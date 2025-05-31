@@ -368,6 +368,13 @@ public:
             }
         }
 
+        std::ranges::sort(symbols, [](const std::pair<int, int>& a, const std::pair<int, int>& b) {
+            if (a.second == b.second) {
+                return a.first < b.first;
+            }
+            return a.second < b.second;
+        });
+
         {
             uint16_t current = 0;
             uint16_t current_len = symbols[0].second;
@@ -405,6 +412,9 @@ public:
             int target = curr_len - 2;
             while (target > 0 && numOfLength[target] == 0) {
                 target--;
+            }
+            if (target < 1) {
+                throw std::runtime_error("No valid target length found for reduction.");
             }
             numOfLength[curr_len] -= 2;
             numOfLength[curr_len - 1]++;

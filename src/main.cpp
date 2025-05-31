@@ -26,7 +26,7 @@ using namespace f9ay;
 
 int main(int argc, char** argv) {
     std::filesystem::path path = std::source_location::current().file_name();
-    path = path.parent_path().parent_path() / "test_data" / "fire.bmp";
+    path = path.parent_path().parent_path() / "test_data" / "1.bmp";
     std::cout << path << std::endl;
     std::ifstream fs(path, std::ios::binary);
     if (!fs.is_open()) {
@@ -64,14 +64,14 @@ int main(int argc, char** argv) {
     std::visit(
         [&path](auto&& arg) {
             std::ofstream out(path.parent_path() / "test.png", std::ios::binary);
-    
+
             auto rgbMtx = arg.trans_convert([](const auto& color) {
                 return colors::color_cast<colors::RGB>(color);
             });
-    
+
             Matrix<colors::RGB> mtx(1, 1);
             mtx[0, 0] = {0xFF, 0x00, 0x00};
-    
+
             auto [buffer, size] = PNG::exportToByte(rgbMtx, FilterType::Sub);
             out.write(reinterpret_cast<const char*>(buffer.get()), size);
         },

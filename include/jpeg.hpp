@@ -23,7 +23,7 @@ namespace f9ay {
 
 enum class Jpeg_sampling { ds_4_4_4, ds_4_2_2 };
 
-template <Jpeg_sampling sampling_type>
+template <Jpeg_sampling sampling_type = Jpeg_sampling::ds_4_2_2>
 class Jpeg {
 private:
 #pragma pack(push, 1)

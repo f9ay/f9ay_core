@@ -21,9 +21,9 @@
 
 namespace f9ay {
 
-enum class Jpeg_sampling { ds_4_4_4, ds_4_2_2 };
+enum class Jpeg_sampling { ds_4_4_4, ds_4_2_0 };
 
-template <Jpeg_sampling sampling_type = Jpeg_sampling::ds_4_2_2>
+template <Jpeg_sampling sampling_type = Jpeg_sampling::ds_4_2_0>
 class Jpeg {
 private:
 #pragma pack(push, 1)
@@ -291,8 +291,8 @@ private:
 
         // Channel: Y
         write_data<uint8_t>(buffer, 1);  // component ID: Y
-        if constexpr (sampling_type == Jpeg_sampling::ds_4_2_2) {
-            write_data<uint8_t>(buffer, 0x22);  // sampling factors: H=1, V=1 (4:2:2)
+        if constexpr (sampling_type == Jpeg_sampling::ds_4_2_0) {
+            write_data<uint8_t>(buffer, 0x22);  // sampling factors: H=1, V=1 (4:2:0)
         } else {
             write_data<uint8_t>(buffer, 0x11);  // sampling factors: H=1, V=1 (4:4:4)
         }
@@ -337,7 +337,7 @@ private:
         const size_t mcu_cnt = dcs[1].size();
 
         size_t mcu_ratio = 1;
-        if constexpr (sampling_type == Jpeg_sampling::ds_4_2_2) {
+        if constexpr (sampling_type == Jpeg_sampling::ds_4_2_0) {
             mcu_ratio = 4;
         }
 
@@ -409,7 +409,7 @@ private:
         std::vector<Matrix<int>> cb_seq;
         std::vector<Matrix<int>> cr_seq;
 
-        if constexpr (sampling_type == Jpeg_sampling::ds_4_2_2) {
+        if constexpr (sampling_type == Jpeg_sampling::ds_4_2_0) {
             split<16>(Y)
                 .trans_convert([](const auto &mtx) {
                     return split<8>(mtx);

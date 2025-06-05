@@ -114,14 +114,14 @@ public:
 
 private:
     static auto build_huffman_tree(std::vector<std::vector<int32_t>> &dcs,
-                                   std::vector<Matrix<std::vector<std::pair<unsigned char, int>>>> &acs) {
+                                   std::vector<std::vector<std::vector<std::pair<unsigned char, int>>>> &acs) {
         Huffman_tree y_dc;
         for (const auto &[cat, value] : convert_dc_to_size_value(dcs[0])) {
             y_dc.add_one(cat);
         }
         y_dc.build<16>();
         Huffman_tree y_ac;
-        for (auto &ac : acs[0].flattenToSpan()) {
+        for (auto &ac : acs[0]) {
             for (auto &[first, value] : ac) {
                 y_ac.add_one(first);
             }
@@ -140,12 +140,12 @@ private:
         uv_dc.build<16>();
         ////////////////////
         Huffman_tree uv_ac;
-        for (auto &ac : acs[1].flattenToSpan()) {
+        for (auto &ac : acs[1]) {
             for (auto &[first, value] : ac) {
                 uv_ac.add_one(first);
             }
         }
-        for (auto &ac : acs[2].flattenToSpan()) {
+        for (auto &ac : acs[2]) {
             for (auto &[first, value] : ac) {
                 uv_ac.add_one(first);
             }
@@ -287,7 +287,7 @@ private:
 
         // Channel: Y
         write_data<uint8_t>(buffer, 1);     // component ID: Y
-        write_data<uint8_t>(buffer, 0x11);  // sampling factors: H=1, V=1 (4:4:4)
+        write_data<uint8_t>(buffer, 0x22);  // sampling factors: H=1, V=1 (4:4:4)
         write_data<uint8_t>(buffer, 0);     // quant table ID: 0
 
         // Channel: Cb
@@ -305,7 +305,7 @@ private:
     static void write_binary_stream(
         std::vector<std::byte> &buffer, Huffman_tree &y_dc_huffman, Huffman_tree &y_ac_huffman,
         Huffman_tree &uv_dc_huffman, Huffman_tree &uv_ac_huffman, std::vector<std::vector<int32_t>> &dcs,
-        std::vector<Matrix<std::vector<std::pair<unsigned char, int>>>> &acs) {
+        std::vector<std::vector<std::vector<std::pair<unsigned char, int>>>> &acs) {
         write_data<uint16_t, std::endian::big>(buffer, 0xFFDAu);
         int size_index = buffer.size();
         buffer.resize(buffer.size() + 2);
@@ -328,20 +328,20 @@ private:
         auto cr_dc_encoded = encode_huffman_dc(dcs[2], uv_dc_huffman);
         const size_t mcu_cnt = dcs[1].size();
 
-        const size_t mcu_ratio = 1;
+        const size_t mcu_ratio = 4;
 
         for (int i = 0; i < mcu_cnt; i++) {
             for (int y_index = i * mcu_ratio; y_index < i * mcu_ratio + mcu_ratio && y_index < dcs[0].size();
                  y_index++) {
-                auto acspan = acs[0].flattenToSpan();
+                std::span acspan = acs[0];
                 write_block(bit_writer, y_dc_encoded[y_index], acspan[y_index], y_ac_huffman);
             }
             {  // cb
-                auto acspan = acs[1].flattenToSpan();
+                std::span acspan = acs[1];
                 write_block(bit_writer, cb_dc_encoded[i], acspan[i], uv_ac_huffman);
             }
             {  // cr
-                auto acspan = acs[2].flattenToSpan();
+                std::span acspan = acs[2];
                 write_block(bit_writer, cr_dc_encoded[i], acspan[i], uv_ac_huffman);
             }
         }
@@ -393,68 +393,74 @@ private:
                 Cr[i, j] = yuv[i, j].cr;
             }
         }
-        // TODO Downsampling
-        // TODO 原圖不是二的倍數
-        //         Matrix<uint8_t> Cb(src.row() / 2, src.col() / 2);
-        //         Matrix<uint8_t> Cr(src.row() / 2, src.col() / 2);
-        // #pragma loop(hint_parallel(0))
-        //         for (int i = 0; i < Cb.row(); i++) {
-        //             for (int j = 0; j < Cr.col(); j++) {
-        //                 Cb[i, j] = yuv[i * 2, j * 2].cb;
-        //                 Cr[i, j] = yuv[i * 2, j * 2].cr;
-        //             }
-        //         }
 
-        auto split_y = split<8>(Y);
-        auto split_cb = split<8>(Cb);
-        auto split_cr = split<8>(Cr);
+        std::vector<Matrix<int>> y_seq;
+        split<16>(Y)
+            .trans_convert([](const auto &mtx) {
+                return split<8>(mtx);
+            })
+            .for_each([&y_seq](const auto &mtx) {
+                for (int i = 0; i < mtx.row(); i++) {
+                    for (int j = 0; j < mtx.col(); j++) {
+                        y_seq.push_back(mtx[i, j]);
+                    }
+                }
+            });
+        std::vector<Matrix<int>> cb_seq;
+        split<16>(Cb).for_each([&cb_seq](auto &&mtx) {
+            cb_seq.push_back(down_sample(mtx));
+        });
+        std::vector<Matrix<int>> cr_seq;
+        split<16>(Cr).for_each([&cr_seq](auto &&mtx) {
+            cr_seq.push_back(down_sample(mtx));
+        });
 
         std::vector<std::vector<int32_t>> dcs;
         dcs.reserve(3);
-        std::vector<Matrix<std::vector<std::pair<uint8_t, int>>>> acs;
+        std::vector<std::vector<std::vector<std::pair<uint8_t, int>>>> acs;
         acs.reserve(3);
-        for (const auto m_ptr : {&split_y, &split_cb, &split_cr}) {
-            auto &m = *m_ptr;
+        for (const auto seq_ptr : {&y_seq, &cb_seq, &cr_seq}) {
+            auto &seq = *seq_ptr;
 
             // TODO 用表達式模板優化
             /* clang-format off */
-            auto zigzaged =
-                m.transform([](Matrix<int> &block) {
-                     block.transform([](int &x) {
-                         x -= 128;
-                     });
+            auto zigzaged = seq
+                | std::views::transform([](Matrix<int> &block) {
+                    block.transform([](int &x) {
+                        x -= 128;
+                    });
+                    return block;
                 })
-                .trans_convert(Dct<8>::dct<int, int>)
-                .transform([m_ptr, y_ptr = &split_y](Matrix<int> &block) {
-                    if (m_ptr == y_ptr) {
-                        block.round_div(y_quantization_matrix);
+                | std::views::transform(Dct<8>::dct<int, int>)
+                | std::views::transform([seq_ptr, y_ptr = &y_seq](const Matrix<int> &block) -> Matrix<int> {
+                    if (seq_ptr == y_ptr) {
+                        return block.round_div_convert(y_quantization_matrix);
                     }
-                    else {
-                        block.round_div(uv_quantization_matrix);
-                    }
+                    return block.round_div_convert(uv_quantization_matrix);
                 })
-                .trans_convert([](const Matrix<int> &block) {
+                | std::views::transform([](const Matrix<int> &block) {
                     // zig zag 排列
                     // 忽略 uninitialize error 因為每個 index 都會填東西
                     std::array<int, 8 * 8> block_zig;  // NOLINT(*-pro-type-member-init)
                     int index = 0;
-                    for (auto &coord: zigzag<8>()) {
-                        block_zig[index++] = block[coord.first, coord.second];
+                    for (const auto &[i, j]: zigzag<8>()) {
+                        block_zig[index++] = block[i, j];
                     }
                     return block_zig;
-                });
+                })
+                | std::ranges::to<std::vector>();
             /* clang-format on */
-            std::vector<int32_t> dc(zigzaged.flattenToSpan().size());
-            for (int i = 0; i < zigzaged.flattenToSpan().size(); i++) {
+            std::vector<int32_t> dc(zigzaged.size());
+            for (int i = 0; i < zigzaged.size(); i++) {
                 // dc 使用 差分
                 if (i == 0) {
-                    dc[i] = zigzaged.flattenToSpan()[i][0];
+                    dc[i] = zigzaged[i][0];
                 } else {
-                    dc[i] = zigzaged.flattenToSpan()[i][0] - zigzaged.flattenToSpan()[i - 1][0];
+                    dc[i] = zigzaged[i][0] - zigzaged[i - 1][0];
                 }
             }
 
-            auto ac = zigzaged.trans_convert(calculate_rle);
+            auto ac = zigzaged | std::views::transform(calculate_rle) | std::ranges::to<std::vector>();
 
             dcs.emplace_back(std::move(dc));
             acs.emplace_back(std::move(ac));
@@ -495,7 +501,7 @@ public:
 
 private:
     template <int N, int M = N, typename T>
-    static Matrix<Matrix<T>> split(Matrix<T> &mtx) {
+    static Matrix<Matrix<T>> split(const Matrix<T> &mtx) {
         const int row_sz = mtx.row() / N + int(mtx.row() % N != 0);
         const int col_sz = mtx.col() / M + int(mtx.col() % M != 0);
         Matrix<Matrix<T>> result(row_sz, col_sz);
@@ -505,15 +511,26 @@ private:
                 for (int k = 0; k < N; k++) {
                     for (int l = 0; l < M; l++) {
                         if (i * N + k >= mtx.row() || j * M + l >= mtx.col()) [[unlikely]] {
-                            int x_diff = std::abs(i * N + k - (mtx.row() - 1));
-                            int y_diff = std::abs(j * M + l - (mtx.col() - 1));
-                            block[k, l] = mtx[mtx.row() - 1 - x_diff, mtx.col() - 1 - y_diff];
+                            int new_h = std::min(i * N + k, mtx.row() - 1);
+                            int new_w = std::min(j * M + l, mtx.col() - 1);
+                            block[k, l] = mtx[new_h, new_w];
                         } else {
                             block[k, l] = mtx[i * N + k, j * M + l];
                         }
                     }
                 }
                 result[i, j] = std::move(block);
+            }
+        }
+        return result;
+    }
+
+    template <typename T>
+    static Matrix<T> down_sample(const Matrix<T> &mtx) {
+        Matrix<T> result(8, 8);
+        for (int i = 0; i < 8; i++) {
+            for (int j = 0; j < 8; j++) {
+                result[i, j] = mtx[i * 2, j * 2];
             }
         }
         return result;

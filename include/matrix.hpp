@@ -185,10 +185,19 @@ public:
     // TODO 用表達式模板優化
     template <typename Func>
     auto &transform(Func &&func) {
-#pragma loop(hint_parallel(0))
         for (int i = 0; i < row(); i++) {
             for (int j = 0; j < col(); j++) {
-                func(self()[i, j]);
+                func((*this)[i, j]);
+            }
+        }
+        return *this;
+    }
+
+    template <typename Func>
+    auto &for_each(Func &&func) const {
+        for (int i = 0; i < row(); i++) {
+            for (int j = 0; j < col(); j++) {
+                func((*this)[i, j]);
             }
         }
         return *this;
@@ -196,9 +205,7 @@ public:
 
     template <typename Func>
     auto trans_convert(Func &&func) const {
-        // 不能 return reference
         Matrix<std::decay_t<decltype(func((*this)[0, 0]))>> result(row(), col());
-#pragma loop(hint_parallel(0))
         for (int i = 0; i < row(); i++) {
             for (int j = 0; j < col(); j++) {
                 result[i, j] = func((*this)[i, j]);
@@ -213,13 +220,6 @@ public:
         for (int i = 0; i < row(); i++) {
             for (int j = 0; j < col(); j++) {
                 if constexpr (std::is_integral_v<T>) {
-                    // suppose compiler 會 idiv 優化
-                    // auto tmp = (*this)[i, j] / other[i][j];
-                    // if ((*this)[i, j] % other[i][j] >= other[i][j] / 2) {
-                    //     (*this)[i, j] = tmp + 1;
-                    // } else {
-                    //     (*this)[i, j] = tmp;
-                    // }
                     (*this)[i, j] = std::round((*this)[i, j] / float(other[i][j]));
                 } else {  // 浮點 或 其他不管
                     (*this)[i, j] /= other[i][j];
@@ -227,6 +227,21 @@ public:
             }
         }
         return *this;
+    }
+
+    template <typename U>
+    auto round_div_convert(const U &other) const {
+        Matrix<T> result(row(), col());
+        for (int i = 0; i < row(); i++) {
+            for (int j = 0; j < col(); j++) {
+                if constexpr (std::is_integral_v<T>) {
+                    result[i, j] = std::round((*this)[i, j] / float(other[i][j]));
+                } else {  // 浮點 或 其他不管
+                    result[i, j] = (*this)[i, j] / other[i][j];
+                }
+            }
+        }
+        return result;
     }
 
     decltype(auto) dump() {

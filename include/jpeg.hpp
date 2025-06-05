@@ -20,6 +20,10 @@
 #include "util.hpp"
 
 namespace f9ay {
+
+enum class Jpeg_sampling { ds_4_4_4, ds_4_2_2 };
+
+template <Jpeg_sampling sampling_type>
 class Jpeg {
 private:
 #pragma pack(push, 1)
@@ -286,9 +290,13 @@ private:
         write_data<uint8_t>(buffer, 3);  // 3 channels
 
         // Channel: Y
-        write_data<uint8_t>(buffer, 1);     // component ID: Y
-        write_data<uint8_t>(buffer, 0x22);  // sampling factors: H=1, V=1 (4:4:4)
-        write_data<uint8_t>(buffer, 0);     // quant table ID: 0
+        write_data<uint8_t>(buffer, 1);  // component ID: Y
+        if constexpr (sampling_type == Jpeg_sampling::ds_4_2_2) {
+            write_data<uint8_t>(buffer, 0x22);  // sampling factors: H=1, V=1 (4:2:2)
+        } else {
+            write_data<uint8_t>(buffer, 0x11);  // sampling factors: H=1, V=1 (4:4:4)
+        }
+        write_data<uint8_t>(buffer, 0);  // quant table ID: 0
 
         // Channel: Cb
         write_data<uint8_t>(buffer, 2);     // component ID: Cb
@@ -328,7 +336,10 @@ private:
         auto cr_dc_encoded = encode_huffman_dc(dcs[2], uv_dc_huffman);
         const size_t mcu_cnt = dcs[1].size();
 
-        const size_t mcu_ratio = 4;
+        size_t mcu_ratio = 1;
+        if constexpr (sampling_type == Jpeg_sampling::ds_4_2_2) {
+            mcu_ratio = 4;
+        }
 
         for (int i = 0; i < mcu_cnt; i++) {
             for (int y_index = i * mcu_ratio; y_index < i * mcu_ratio + mcu_ratio && y_index < dcs[0].size();
@@ -395,25 +406,38 @@ private:
         }
 
         std::vector<Matrix<int>> y_seq;
-        split<16>(Y)
-            .trans_convert([](const auto &mtx) {
-                return split<8>(mtx);
-            })
-            .for_each([&y_seq](const auto &mtx) {
-                for (int i = 0; i < mtx.row(); i++) {
-                    for (int j = 0; j < mtx.col(); j++) {
-                        y_seq.push_back(mtx[i, j]);
-                    }
-                }
-            });
         std::vector<Matrix<int>> cb_seq;
-        split<16>(Cb).for_each([&cb_seq](auto &&mtx) {
-            cb_seq.push_back(down_sample(mtx));
-        });
         std::vector<Matrix<int>> cr_seq;
-        split<16>(Cr).for_each([&cr_seq](auto &&mtx) {
-            cr_seq.push_back(down_sample(mtx));
-        });
+
+        if constexpr (sampling_type == Jpeg_sampling::ds_4_2_2) {
+            split<16>(Y)
+                .trans_convert([](const auto &mtx) {
+                    return split<8>(mtx);
+                })
+                .for_each([&y_seq](const auto &mtx) {
+                    for (int i = 0; i < mtx.row(); i++) {
+                        for (int j = 0; j < mtx.col(); j++) {
+                            y_seq.push_back(mtx[i, j]);
+                        }
+                    }
+                });
+            split<16>(Cb).for_each([&cb_seq](auto &&mtx) {
+                cb_seq.push_back(down_sample(mtx));
+            });
+            split<16>(Cr).for_each([&cr_seq](auto &&mtx) {
+                cr_seq.push_back(down_sample(mtx));
+            });
+        } else {
+            split<8>(Y).for_each([&y_seq](const auto &mtx) {
+                y_seq.push_back(mtx);
+            });
+            split<8>(Cb).for_each([&cb_seq](auto &&mtx) {
+                cb_seq.push_back(mtx);
+            });
+            split<8>(Cr).for_each([&cr_seq](auto &&mtx) {
+                cr_seq.push_back(mtx);
+            });
+        }
 
         std::vector<std::vector<int32_t>> dcs;
         dcs.reserve(3);
@@ -422,7 +446,6 @@ private:
         for (const auto seq_ptr : {&y_seq, &cb_seq, &cr_seq}) {
             auto &seq = *seq_ptr;
 
-            // TODO 用表達式模板優化
             /* clang-format off */
             auto zigzaged = seq
                 | std::views::transform([](Matrix<int> &block) {
@@ -473,7 +496,6 @@ public:
     static std::pair<std::unique_ptr<std::byte[]>, size_t> write(const Matrix<colors::RGB> &src) {
         auto [dcs, acs] = encode(src);
         auto [y_dc, y_ac, uv_dc, uv_ac] = build_huffman_tree(dcs, acs);
-        // size_t size = 65354133;  // TODO
         std::vector<std::byte> buffer;
         write_data<uint16_t, std::endian::big>(buffer, 0xFFD8u);
         write_app0(buffer);
@@ -530,7 +552,9 @@ private:
         Matrix<T> result(8, 8);
         for (int i = 0; i < 8; i++) {
             for (int j = 0; j < 8; j++) {
-                result[i, j] = mtx[i * 2, j * 2];
+                auto sum =
+                    mtx[i * 2, j * 2] + mtx[i * 2 + 1, j * 2] + mtx[i * 2, j * 2 + 1] + mtx[i * 2 + 1, j * 2 + 1];
+                result[i, j] = sum / 4;
             }
         }
         return result;
@@ -540,7 +564,6 @@ private:
     static uint8_t calculate_binary_size(int_type x) {
         [[assume(x > 0)]];
 #ifdef _MSC_VER
-        // lzcnt return leading zero => 0000 0000 1000 0000  return 8
         return 32 - __lzcnt(x);
 #else
         return 32 - __builtin_clz(x);
@@ -572,7 +595,6 @@ private:
             }
         }
         int cnt = 0;
-        // 從 1 開始 因為 dc 不編碼
         for (int i = 1; i <= last_non_zero; i++) {
             if (arr[i] != 0 || cnt == 15) {
                 // [run_len, size_for_bit], amp
@@ -659,14 +681,14 @@ private:
 };
 }  // namespace f9ay
 
-template <typename Char_T>
-struct std::formatter<f9ay::Jpeg::bit_content, Char_T> : std::formatter<std::string, Char_T> {
-    auto format(const f9ay::Jpeg::bit_content &coe, auto &ctx) const {
-        auto out = ctx.out();
-        out = std::format_to(out, "{}", f9ay::to_str(coe.value, coe.size));
-        return out;
-    }
-};
+// template <typename Char_T, auto type>
+// struct std::formatter<typename f9ay::Jpeg<type>::bit_content, Char_T> : std::formatter<std::string, Char_T> {
+//     auto format(const typename f9ay::Jpeg<type>::bit_content &coe, auto &ctx) const {
+//         auto out = ctx.out();
+//         out = std::format_to(out, "{}", f9ay::to_str(coe.value, coe.size));
+//         return out;
+//     }
+// };
 
 template <typename T, typename Char_T>
 struct std::formatter<std::optional<T>, Char_T> : std::formatter<std::string, Char_T> {

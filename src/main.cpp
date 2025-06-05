@@ -26,7 +26,7 @@ using namespace f9ay;
 
 int main(int argc, char** argv) {
     std::filesystem::path path = std::source_location::current().file_name();
-    path = path.parent_path().parent_path() / "test_data" / "fire.bmp";
+    path = path.parent_path().parent_path() / "test_data" / "test.bmp";
     std::cout << path << std::endl;
     std::ifstream fs(path, std::ios::binary);
     if (!fs.is_open()) {
@@ -42,7 +42,7 @@ int main(int argc, char** argv) {
     std::visit(
         [&]<typename T>(T&& mtx) {
             start = std::chrono::high_resolution_clock::now();
-            std::tie(buffer, size) = Jpeg::exportToByte(mtx);
+            std::tie(buffer, size) = Jpeg<Jpeg_sampling::ds_4_4_4>::exportToByte(mtx);
             end = std::chrono::high_resolution_clock::now();
         },
         result);

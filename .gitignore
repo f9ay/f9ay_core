@@ -6,4 +6,5 @@ out/
 .idea/
 cmake-build**
 test_data/640mb.bmp
+test_data/*.exe
 

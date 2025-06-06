@@ -204,6 +204,16 @@ public:
     }
 
     template <typename Func>
+    auto &for_each(Func &&func) {
+        for (int i = 0; i < row(); i++) {
+            for (int j = 0; j < col(); j++) {
+                func((*this)[i, j]);
+            }
+        }
+        return *this;
+    }
+
+    template <typename Func>
     auto trans_convert(Func &&func) const {
         Matrix<std::decay_t<decltype(func((*this)[0, 0]))>> result(row(), col());
         for (int i = 0; i < row(); i++) {

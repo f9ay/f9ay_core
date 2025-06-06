@@ -6,6 +6,7 @@
 #include <format>
 #include <map>
 #include <memory>
+#include <thread>
 
 #include "colors.hpp"
 #include "filter.hpp"
@@ -45,7 +46,21 @@ public:
                 _compressFixed(imgSpan, bitWriter);
                 break;
             case BlockType::Dynamic:
-                _compressDynamic(imgSpan, bitWriter, 1);
+                constexpr size_t blockSize = 65536;  // 64KB
+                size_t imgSize = imgSpan.size();
+                if (imgSize > blockSize) {
+                    // split the image into blocks of size blockSize
+                    auto numBlocks = (imgSize + blockSize - 1) / blockSize;  // round up division
+
+                    for (size_t i = 0; i < numBlocks; ++i) {
+                        size_t start = i * blockSize;
+                        size_t end = std::min(start + blockSize, imgSize);
+                        auto blockSpan = imgSpan.subspan(start, end - start);
+                        _compressDynamic(blockSpan, bitWriter, i == numBlocks - 1 ? 1 : 0);
+                    }
+                } else {
+                    _compressDynamic(imgSpan, bitWriter, 1);
+                }
                 break;
         }
 
@@ -149,7 +164,7 @@ private:
         static_assert(_fixedLengthTable.size() == 259, "Fixed length table size mismatch");
         using value_type = std::decay_t<decltype(flattened[0])>;
 
-        auto lz77Compressed = LZ77::lz77EncodeSlow(flattened);  // Apply LZ77 compression
+        auto lz77Compressed = LZ77::lz77EncodeSlow(flattened);
 
         // Build Huffman tree for dynamic compression
         Huffman_tree litLengthTree;

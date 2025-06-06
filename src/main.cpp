@@ -26,7 +26,7 @@ using namespace f9ay;
 
 int main(int argc, char** argv) {
     std::filesystem::path path = std::source_location::current().file_name();
-    path = path.parent_path().parent_path() / "test_data" / "test.bmp";
+    path = path.parent_path().parent_path() / "test_data" / "gay.bmp";
     std::cout << path << std::endl;
     std::ifstream fs(path, std::ios::binary);
     if (!fs.is_open()) {
@@ -42,7 +42,7 @@ int main(int argc, char** argv) {
     std::visit(
         [&]<typename T>(T&& mtx) {
             start = std::chrono::high_resolution_clock::now();
-            std::tie(buffer, size) = Jpeg<Jpeg_sampling::ds_4_4_4>::exportToByte(mtx);
+            std::tie(buffer, size) = Jpeg<Jpeg_sampling::ds_4_2_0>::exportToByte(mtx);
             end = std::chrono::high_resolution_clock::now();
         },
         result);
@@ -59,14 +59,17 @@ int main(int argc, char** argv) {
     //         mtx[i, j].b = res[i, j].b;
     //     }
     // }
-    // std::visit(
-    //     [&path](auto&& arg) {
-    //         std::ofstream out(path.parent_path() / "test.png", std::ios::binary);
-    //
-    //         auto [buffer, size] = PNG::exportToByte(arg);
-    //         out.write(reinterpret_cast<const char*>(buffer.get()), size);
-    //     },
-    //     result);
+    std::visit(
+        [&path](auto&& arg) {
+            std::ofstream out(path.parent_path() / "test.png", std::ios::binary);
+            // calculate duration
+            auto start = std::chrono::high_resolution_clock::now();
+            auto [buffer, size] = PNG::exportToByte(arg);
+            auto end = std::chrono::high_resolution_clock::now();
+            std::println("{}", std::chrono::duration_cast<std::chrono::milliseconds>(end - start));
+            out.write(reinterpret_cast<const char*>(buffer.get()), size);
+        },
+        result);
     //
     // std::string test = "aaabbaaa";
     //

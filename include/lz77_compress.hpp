@@ -8,6 +8,7 @@
 #include <list>
 #include <numeric>
 #include <optional>
+#include <ranges>
 #include <stack>
 #include <string>
 #include <tuple>
@@ -106,7 +107,9 @@ public:
                     bufferBegin = lookheadEnd;
                     // push back the match
                     // and the next character
-                    result.emplace_back(offset, length, (bufferBegin != container.end()) ? *bufferBegin : std::nullopt);
+                    result.emplace_back(
+                        offset, length,
+                        (bufferBegin != container.end()) ? std::make_optional(*bufferBegin) : std::nullopt);
 
                     bufferBegin++;
 
@@ -145,7 +148,7 @@ public:
     template <int dictSize = 4096, int hashKeyLen = 3, int maxMatchLen = 258, ContainerConcept Container>
     static auto lz77EncodeSlow(const Container& container) {
         std::unordered_map<std::array<typename Container::value_type, hashKeyLen>,
-                           std::list<decltype(container.begin())>,
+                           std::vector<decltype(container.begin())>,
                            ArrayHash<typename Container::value_type, hashKeyLen>>
             hashTable;
 
@@ -158,9 +161,6 @@ public:
 
             if (std::distance(bufferBegin, container.end()) >= hashKeyLen) {
                 std::copy(bufferBegin, bufferBegin + hashKeyLen, hashKey.begin());
-                hashTable[hashKey].remove_if([&bufferBegin](decltype(container.begin()) it) {
-                    return std::distance(it, bufferBegin) > 32768;
-                });
                 auto it = hashTable.find(hashKey);
 
                 if (it != hashTable.end()) {
@@ -168,7 +168,10 @@ public:
                     int offset = 0;
                     decltype(container.begin()) maxMatchEnd;
 
-                    for (auto dictMatchbegin : it->second) {
+                    for (auto dictMatchbegin : std::ranges::reverse_view(it->second)) {
+                        if (std::distance(dictMatchbegin, bufferBegin) > 32768) {
+                            break;
+                        }
                         int maxPossibleLength =
                             std::min({maxMatchLen, static_cast<int>(std::distance(dictMatchbegin, container.end())),
                                       static_cast<int>(std::distance(bufferBegin, container.end()))});

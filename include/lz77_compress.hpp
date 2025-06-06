@@ -8,6 +8,7 @@
 #include <list>
 #include <numeric>
 #include <optional>
+#include <ranges>
 #include <stack>
 #include <string>
 #include <tuple>
@@ -167,9 +168,9 @@ public:
                     int offset = 0;
                     decltype(container.begin()) maxMatchEnd;
 
-                    for (auto dictMatchbegin : it->second) {
-                        if(std::distance(dictMatchbegin, bufferBegin) > 32768) {
-                            continue;
+                    for (auto dictMatchbegin : std::ranges::reverse_view(it->second)) {
+                        if (std::distance(dictMatchbegin, bufferBegin) > 32768) {
+                            break;
                         }
                         int maxPossibleLength =
                             std::min({maxMatchLen, static_cast<int>(std::distance(dictMatchbegin, container.end())),

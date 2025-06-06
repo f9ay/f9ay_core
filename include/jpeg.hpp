@@ -110,7 +110,7 @@ public:
                    if (x >= 0) {
                        value = x;
                    } else {
-                       value = (1 << category(x)) - 1 + x;  // 正確的負數編碼
+                       value = (1 << category(x)) - 1 + x;
                    }
                    return std::pair<uint8_t, uint32_t>{category(x), value};  // size value
                });
@@ -160,7 +160,6 @@ private:
     }
 
     static auto encode_huffman_dc(auto &dc, auto &huffman) {
-        // std::vector<int8_t>
         std::vector<std::pair<bit_content, std::optional<bit_content>>> result;
         for (const auto &[cat, value] : convert_dc_to_size_value(dc)) {
             auto enc = huffman.getMapping(cat);
@@ -203,6 +202,10 @@ private:
     inline static int cnt = 0;
     template <typename T, std::endian endian = std::endian::native>
     static void write_data(std::vector<std::byte> &buffer, const T &val) {
+        if constexpr (sizeof(T) == 1) {
+            buffer.push_back(std::byte{val});
+            return;
+        }
         buffer.resize(buffer.size() + sizeof(T));
         auto dest = &buffer.back() - sizeof(T) + 1;
         if constexpr (endian == std::endian::little) {
@@ -231,7 +234,7 @@ private:
         write_data<uint16_t, std::endian::big>(buffer, 0xFFDBu);
         int size_index = buffer.size();
         buffer.resize(buffer.size() + 2);
-        // 精度 << 8 | ID
+        // 精度 << 4 | ID
         write_data<uint8_t>(buffer, 0);  // 0 for Y
         for (const auto &[i, j] : zigzag<8>()) {
             write_data<uint8_t>(buffer, qt_y[i][j]);
@@ -292,9 +295,9 @@ private:
         // Channel: Y
         write_data<uint8_t>(buffer, 1);  // component ID: Y
         if constexpr (sampling_type == Jpeg_sampling::ds_4_2_0) {
-            write_data<uint8_t>(buffer, 0x22);  // sampling factors: H=1, V=1 (4:2:0)
+            write_data<uint8_t>(buffer, 0x22);  // sampling factors (4:2:0)
         } else {
-            write_data<uint8_t>(buffer, 0x11);  // sampling factors: H=1, V=1 (4:4:4)
+            write_data<uint8_t>(buffer, 0x11);  // sampling factors (4:4:4)
         }
         write_data<uint8_t>(buffer, 0);  // quant table ID: 0
 
@@ -383,25 +386,30 @@ private:
         }
     }
 
-    static auto encode(const Matrix<colors::RGB> &src) {
-        auto yuv = src.trans_convert([](const colors::RGB &color) -> colors::YCbCr {
-            const auto &[r, g, b] = color;
-            return colors::YCbCr{
-                int(std::clamp(roundf(0.299f * r + 0.587f * g + 0.114f * b), 0.0f, 255.0f)),
-                int(std::clamp(roundf(-0.168736f * r - 0.331364f * g + 0.5f * b + 128), 0.0f, 255.0f)),
-                int(std::clamp(roundf(0.5f * r - 0.418688f * g - 0.081312f * b + 128), 0.0f, 255.0f))};
-        });
-        // 分離有助於 cache
-
+    template <colors::color_type ColorType>
+    static auto encode(const Matrix<ColorType> &src) {
         Matrix<int> Y(src.row(), src.col());
         Matrix<int> Cb(src.row(), src.col());
         Matrix<int> Cr(src.row(), src.col());
-#pragma loop(hint_parallel(0))
-        for (int i = 0; i < src.row(); i++) {
-            for (int j = 0; j < src.col(); j++) {
-                Y[i, j] = yuv[i, j].y;
-                Cb[i, j] = yuv[i, j].cb;
-                Cr[i, j] = yuv[i, j].cr;
+
+        if constexpr (!std::same_as<ColorType, colors::YCbCr>) {
+            for (int i = 0; i < src.row(); i++) {
+                for (int j = 0; j < src.col(); j++) {
+                    const auto r = src[i, j].r;
+                    const auto g = src[i, j].g;
+                    const auto b = src[i, j].b;
+                    Y[i, j] = int(roundf(0.299f * r + 0.587f * g + 0.114f * b));
+                    Cb[i, j] = int(roundf(-0.168736f * r - 0.331364f * g + 0.5f * b + 128));
+                    Cr[i, j] = int(roundf(0.5f * r - 0.418688f * g - 0.081312f * b + 128));
+                }
+            }
+        } else {
+            for (int i = 0; i < src.row(); i++) {
+                for (int j = 0; j < src.col(); j++) {
+                    Y[i, j] = src[i, j].y;
+                    Cb[i, j] = src[i, j].cb;
+                    Cr[i, j] = src[i, j].cr;
+                }
             }
         }
 
@@ -414,10 +422,10 @@ private:
                 .trans_convert([](const auto &mtx) {
                     return split<8>(mtx);
                 })
-                .for_each([&y_seq](const auto &mtx) {
+                .for_each([&y_seq](auto &mtx) {
                     for (int i = 0; i < mtx.row(); i++) {
                         for (int j = 0; j < mtx.col(); j++) {
-                            y_seq.push_back(mtx[i, j]);
+                            y_seq.emplace_back(std::move(mtx[i, j]));
                         }
                     }
                 });
@@ -428,21 +436,19 @@ private:
                 cr_seq.push_back(down_sample(mtx));
             });
         } else {
-            split<8>(Y).for_each([&y_seq](const auto &mtx) {
-                y_seq.push_back(mtx);
+            split<8>(Y).for_each([&y_seq](auto &mtx) {
+                y_seq.push_back(std::move(mtx));
             });
-            split<8>(Cb).for_each([&cb_seq](auto &&mtx) {
-                cb_seq.push_back(mtx);
+            split<8>(Cb).for_each([&cb_seq](auto &mtx) {
+                cb_seq.push_back(std::move(mtx));
             });
-            split<8>(Cr).for_each([&cr_seq](auto &&mtx) {
-                cr_seq.push_back(mtx);
+            split<8>(Cr).for_each([&cr_seq](auto &mtx) {
+                cr_seq.push_back(std::move(mtx));
             });
         }
 
         std::vector<std::vector<int32_t>> dcs;
-        dcs.reserve(3);
         std::vector<std::vector<std::vector<std::pair<uint8_t, int>>>> acs;
-        acs.reserve(3);
         for (const auto seq_ptr : {&y_seq, &cb_seq, &cr_seq}) {
             auto &seq = *seq_ptr;
 
@@ -455,7 +461,7 @@ private:
                     return block;
                 })
                 | std::views::transform(Dct<8>::dct<int, int>)
-                | std::views::transform([seq_ptr, y_ptr = &y_seq](const Matrix<int> &block) -> Matrix<int> {
+                | std::views::transform([seq_ptr, y_ptr = &y_seq](const Matrix<int> &block) {
                     if (seq_ptr == y_ptr) {
                         return block.round_div_convert(y_quantization_matrix);
                     }
@@ -475,7 +481,6 @@ private:
             /* clang-format on */
             std::vector<int32_t> dc(zigzaged.size());
             for (int i = 0; i < zigzaged.size(); i++) {
-                // dc 使用 差分
                 if (i == 0) {
                     dc[i] = zigzaged[i][0];
                 } else {
@@ -493,7 +498,8 @@ private:
     }
 
 public:
-    static std::pair<std::unique_ptr<std::byte[]>, size_t> write(const Matrix<colors::RGB> &src) {
+    template <colors::color_type ColorType>
+    static std::pair<std::unique_ptr<std::byte[]>, size_t> write(const Matrix<ColorType> &src) {
         auto [dcs, acs] = encode(src);
         auto [y_dc, y_ac, uv_dc, uv_ac] = build_huffman_tree(dcs, acs);
         std::vector<std::byte> buffer;
@@ -511,14 +517,7 @@ public:
 
     template <typename T>
     static std::pair<std::unique_ptr<std::byte[]>, size_t> exportToByte(const Matrix<T> &src) {
-        if constexpr (std::same_as<T, colors::RGB>) {
-            return write(src);
-        } else {
-            auto mtx = src.trans_convert([](auto &&ele) {
-                return colors::color_cast<colors::RGB>(ele);
-            });
-            return write(mtx);
-        }
+        return write(src);
     }
 
 private:

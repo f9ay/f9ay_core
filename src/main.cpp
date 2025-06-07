@@ -59,17 +59,17 @@ int main(int argc, char** argv) {
     //         mtx[i, j].b = res[i, j].b;
     //     }
     // }
-    // std::visit(
-    //     [&path](auto&& arg) {
-    //         std::ofstream out(path.parent_path() / "test.png", std::ios::binary);
-    //         // calculate duration
-    //         auto start = std::chrono::high_resolution_clock::now();
-    //         auto [buffer, size] = PNG::exportToByte(arg);
-    //         auto end = std::chrono::high_resolution_clock::now();
-    //         std::println("{}", std::chrono::duration_cast<std::chrono::milliseconds>(end - start));
-    //         out.write(reinterpret_cast<const char*>(buffer.get()), size);
-    //     },
-    //     result);
+    std::visit(
+        [&path](auto&& arg) {
+            std::ofstream out(path.parent_path() / "test.png", std::ios::binary);
+            // calculate duration
+            auto start = std::chrono::high_resolution_clock::now();
+            auto [buffer, size] = PNG::exportToByte(arg);
+            auto end = std::chrono::high_resolution_clock::now();
+            std::println("{}", std::chrono::duration_cast<std::chrono::milliseconds>(end - start));
+            out.write(reinterpret_cast<const char*>(buffer.get()), size);
+        },
+        result);
     //
     // std::string test = "aaabbaaa";
     //

@@ -46,21 +46,7 @@ public:
                 _compressFixed(imgSpan, bitWriter);
                 break;
             case BlockType::Dynamic:
-                constexpr size_t blockSize = 65536;  // 64KB
-                size_t imgSize = imgSpan.size();
-                if (imgSize > blockSize) {
-                    // split the image into blocks of size blockSize
-                    auto numBlocks = (imgSize + blockSize - 1) / blockSize;  // round up division
-
-                    for (size_t i = 0; i < numBlocks; ++i) {
-                        size_t start = i * blockSize;
-                        size_t end = std::min(start + blockSize, imgSize);
-                        auto blockSpan = imgSpan.subspan(start, end - start);
-                        _compressDynamic(blockSpan, bitWriter, i == numBlocks - 1 ? 1 : 0);
-                    }
-                } else {
-                    _compressDynamic(imgSpan, bitWriter, 1);
-                }
+                _compressDynamic(imgSpan, bitWriter, 1);
                 break;
         }
 
